@@ -373,6 +373,12 @@
   .skill-node.maxed { background: #b9c7a0; }
   .skill-node.affordable { box-shadow: inset 0 0 0 2px #4a5a32; }
 
+  /* Static "always-on" indicator shown in place of an ability button once
+     its passive capstone (Permeable Scales / Perpetual Molt) is owned —
+     non-interactive, dimmed relative to a live button. */
+  .btn-wide.passive { opacity: .7; cursor: default; }
+  .btn-wide.passive:active { transform: none; }
+
   .modal .setting-toggle {
     display: flex;
     justify-content: space-between;
@@ -508,7 +514,9 @@
     <div class="menu-row" id="abilitiesRow">
       <button class="btn btn-wide" id="btnBodyToss" style="display:none;">Body Toss</button>
       <button class="btn btn-wide" id="btnPhaseWalls" style="display:none;">Phase Walls</button>
+      <button class="btn btn-wide passive" id="phaseWallsPassive" disabled style="display:none;">Phase Walls: Passive</button>
       <button class="btn btn-wide" id="btnBiggerBite" style="display:none;">Bigger Bite</button>
+      <button class="btn btn-wide passive" id="biggerBitePassive" disabled style="display:none;">Bigger Bite: Passive</button>
       <button class="btn btn-wide" id="btnAutoCollect" style="display:none;">Auto-Collect</button>
     </div>
   </div>

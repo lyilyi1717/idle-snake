@@ -92,7 +92,9 @@
 
     const btnBodyToss = $('btnBodyToss');
     const btnPhaseWalls = $('btnPhaseWalls');
+    const indPhaseWalls = $('phaseWallsPassive');
     const btnBiggerBite = $('btnBiggerBite');
+    const indBiggerBite = $('biggerBitePassive');
     const btnAutoCollect = $('btnAutoCollect');
 
     const ownsBodyToss = economy.ownsAbility('bodyToss');
@@ -100,22 +102,32 @@
     const ownsBiggerBite = economy.ownsAbility('biggerBite');
     const ownsAutoCollect = economy.ownsAbility('autoCollect');
 
+    // Permeable Scales / Perpetual Molt capstones: once owned, the ability
+    // is a permanent passive, not an activatable button (§8) — hide the
+    // button and show a static "Passive" indicator instead, same
+    // style.display pattern used for un-owned abilities above.
+    const phaseWallsPassive = !!(scene && scene.permanentPhaseWalls);
+    const biggerBitePassive = !!(scene && scene.permanentBiggerBite);
+
     btnBodyToss.style.display = ownsBodyToss ? '' : 'none';
-    btnPhaseWalls.style.display = ownsPhaseWalls ? '' : 'none';
-    btnBiggerBite.style.display = ownsBiggerBite ? '' : 'none';
+    btnPhaseWalls.style.display = (ownsPhaseWalls && !phaseWallsPassive) ? '' : 'none';
+    indPhaseWalls.style.display = (ownsPhaseWalls && phaseWallsPassive) ? '' : 'none';
+    btnBiggerBite.style.display = (ownsBiggerBite && !biggerBitePassive) ? '' : 'none';
+    indBiggerBite.style.display = (ownsBiggerBite && biggerBitePassive) ? '' : 'none';
     btnAutoCollect.style.display = ownsAutoCollect ? '' : 'none';
 
     if (ownsBodyToss) {
-      const charges = scene ? scene.bodyTossCharges : 0;
-      btnBodyToss.textContent = `Body Toss (${charges})`;
-      btnBodyToss.disabled = charges <= 0;
+      const lives = scene ? scene.lives : 0;
+      const cd = scene ? scene.bodyTossCooldownLeft : 0;
+      btnBodyToss.textContent = cd > 0 ? `Body Toss (${lives}) — ${Math.ceil(cd)}s` : `Body Toss (${lives})`;
+      btnBodyToss.disabled = lives <= 0 || cd > 0;
     }
-    if (ownsPhaseWalls) {
+    if (ownsPhaseWalls && !phaseWallsPassive) {
       const cd = scene ? scene.phaseWallsCooldownLeft : 0;
       btnPhaseWalls.textContent = cd > 0 ? `Phase Walls (${Math.ceil(cd)}s)` : 'Phase Walls (Ready)';
       btnPhaseWalls.disabled = cd > 0;
     }
-    if (ownsBiggerBite) {
+    if (ownsBiggerBite && !biggerBitePassive) {
       const cd = scene ? scene.biggerBiteCooldownLeft : 0;
       btnBiggerBite.textContent = cd > 0 ? `Bigger Bite (${Math.ceil(cd)}s)` : 'Bigger Bite (Ready)';
       btnBiggerBite.disabled = cd > 0;
@@ -526,8 +538,13 @@
     });
 
     bus.addEventListener('snake:bodyToss', (e) => {
-      const uses = e.detail.chargesLeft === 1 ? '1 use' : `${e.detail.chargesLeft} uses`;
-      showToast(`Body Toss! ${uses} left`, 1600);
+      const lives = e.detail.livesLeft === 1 ? '1 life' : `${e.detail.livesLeft} lives`;
+      showToast(`Body Toss! ${lives} left`, 1600);
+      renderAbilityButtons();
+    });
+
+    bus.addEventListener('snake:lifeRegen', () => {
+      showToast('+1 Life!', 1600);
       renderAbilityButtons();
     });
 

@@ -171,12 +171,94 @@
   // spawned as food; the player triggers them directly (button/keybind).
   // Gameplay tuning lives here, matching the currency-vs-behavior split
   // already used for the timed pickups above.
+  // Base/tier-0 tuning. Body Toss's cooldown and Phase Walls/Bigger
+  // Bite/Auto-Collect's cooldown+duration/pickupCount are no longer fixed —
+  // they're computed fresh from the player's current skill-tree node levels
+  // by the compute*Tuning() helpers below (docs/game-theory-design.md §8).
+  // These consts hold only the tier-0 (no nodes owned) baseline numbers the
+  // helpers reduce from.
   const ABILITIES = {
-    bodyToss: { charges: 2, shrinkAmt: 3, minLength: 3 },
+    bodyToss: { minLength: 3, baseCooldownSec: 120 },
     phaseWalls: { durationSec: 6, cooldownSec: 25 },
     biggerBite: { durationSec: 5, cooldownSec: 20, scale: 1.6 },
     autoCollect: { pickupCount: 5, cooldownSec: 30 },
   };
+
+  // Base max Body Toss lives (before Thick Hide), and the absolute hard
+  // cap on max lives regardless of node investment — §9b.
+  const BASE_MAX_LIVES = 2;
+  const MAX_LIVES_CAP = 5;
+
+  // Life-regen popup window bounds (§9c), tightened 30s/level off both
+  // bounds by Quick Regeneration (maxLevel 3).
+  const LIFE_REGEN_MIN_SEC = 270;
+  const LIFE_REGEN_MAX_SEC = 330;
+  const LIFE_REGEN_STEP_SEC = 30;
+
+  // -------------------------------------------------------------
+  // Ability tuning helpers — read the player's current skill-tree node
+  // levels (economy.skillNodeLevel) and return the CURRENT effective
+  // cooldown/duration/pickup numbers. Computed fresh on every call rather
+  // than cached, so they always reflect nodes bought since the last call
+  // (see docs/game-theory-design.md §8 for the exact tables these mirror).
+  // -------------------------------------------------------------
+
+  function computeMaxLives() {
+    return Math.min(MAX_LIVES_CAP, BASE_MAX_LIVES + economy.skillNodeLevel('thickHide'));
+  }
+
+  // Swift Recoil: -10s/lvl, maxLevel 6 (120s -> 60s). Belt-and-suspenders
+  // Math.max(60, ...) floor per §8 — never below 60s no matter what.
+  function computeBodyTossCooldownSec() {
+    const lvl = economy.skillNodeLevel('swiftRecoil');
+    return Math.max(60, ABILITIES.bodyToss.baseCooldownSec - 10 * lvl);
+  }
+
+  // Thinner Walls (-3s cooldown/lvl, maxLevel 5, 25s->10s) then Porous
+  // Scales (-2s cooldown/lvl, +2s duration/lvl, maxLevel 5, from the
+  // post-Thinner-Walls 10s/6s baseline) — §8's exact table.
+  function computePhaseWallsTuning() {
+    const thinner = Math.min(economy.skillNodeLevel('thinnerWalls'), 5);
+    const porous = Math.min(economy.skillNodeLevel('porousScales'), 5);
+    const cooldownSec = Math.max(0, ABILITIES.phaseWalls.cooldownSec - 3 * thinner - 2 * porous);
+    const durationSec = ABILITIES.phaseWalls.durationSec + 2 * porous;
+    return { cooldownSec, durationSec };
+  }
+
+  // Longer Fangs (-2s cooldown/lvl, maxLevel 5, 20s->10s) then Ravenous
+  // Form (-2s cooldown/lvl, +1s duration/lvl, maxLevel 5, from the 10s/5s
+  // baseline) — §8's exact table.
+  function computeBiggerBiteTuning() {
+    const longer = Math.min(economy.skillNodeLevel('longerFangs'), 5);
+    const ravenous = Math.min(economy.skillNodeLevel('ravenousForm'), 5);
+    const cooldownSec = Math.max(0, ABILITIES.biggerBite.cooldownSec - 2 * longer - 2 * ravenous);
+    const durationSec = ABILITIES.biggerBite.durationSec + 1 * ravenous;
+    return { cooldownSec, durationSec };
+  }
+
+  // Extended Instinct (-3s/lvl, maxLevel 5, 30s->15s) then Relentless
+  // Pursuit (-1.75s/lvl cooldown floored at 8s, +0.5 pickup/lvl rounded,
+  // maxLevel 4, from the 15s baseline) — §8. Deliberately NO capstone/
+  // always-on path for Auto-Collect (see §8's explicit reasoning) — there
+  // is no node past Relentless Pursuit in economy.js's SKILL_TREE.abilities.
+  function computeAutoCollectTuning() {
+    const ext = Math.min(economy.skillNodeLevel('extendedInstinct'), 5);
+    const rel = Math.min(economy.skillNodeLevel('relentlessPursuit'), 4);
+    const afterExtendedInstinct = ABILITIES.autoCollect.cooldownSec - 3 * ext;
+    const cooldownSec = Math.max(8, afterExtendedInstinct - 1.75 * rel);
+    const pickupCount = ABILITIES.autoCollect.pickupCount + Math.round(0.5 * rel);
+    return { cooldownSec, pickupCount };
+  }
+
+  // Quick Regeneration tightens both window bounds by 30s/lvl (maxLevel 3,
+  // 270-330s -> 180-240s) — §9c's exact table. Still always a randomized
+  // window, at every level, never a fixed/memorizable metronome.
+  function rollLifeRegenWindowSec() {
+    const lvl = Math.min(economy.skillNodeLevel('quickRegeneration'), 3);
+    const min = LIFE_REGEN_MIN_SEC - LIFE_REGEN_STEP_SEC * lvl;
+    const max = LIFE_REGEN_MAX_SEC - LIFE_REGEN_STEP_SEC * lvl;
+    return min + Math.random() * (max - min);
+  }
 
   function lerpColor(colorA, colorB, t) {
     t = Math.max(0, Math.min(1, t));
@@ -226,13 +308,21 @@
       this.frenzyPips = [];
       this.frenzyPipTarget = FRENZY_PIP_MIN;
       this.trailGhosts = [];
-      this.bodyTossCharges = economy.ownsAbility('bodyToss') ? ABILITIES.bodyToss.charges : 0;
+      this.maxLives = computeMaxLives();
+      this.lives = economy.ownsAbility('bodyToss') ? this.maxLives : 0;
+      this.lives = Math.min(this.lives, this.maxLives);
+      this.bodyTossCooldownLeft = 0;
       this.phaseWallsTimeLeft = 0;
       this.phaseWallsCooldownLeft = 0;
+      this.permanentPhaseWalls = economy.skillNodeLevel('permeableScales') >= 1;
       this.biggerBiteTimeLeft = 0;
       this.biggerBiteCooldownLeft = 0;
+      this.permanentBiggerBite = economy.skillNodeLevel('perpetualMolt') >= 1;
       this.autoCollectRemaining = 0;
       this.autoCollectCooldownLeft = 0;
+      this.autoCollectCooldownSec = ABILITIES.autoCollect.cooldownSec;
+      this.activePlaySecondsBuffer = 0;
+      this.lifeRegenThreshold = economy.getState().stats.activePlaySeconds + rollLifeRegenWindowSec();
       this.scoreEvents = []; // {t, delta} — rolling window for live score-rate readout
       this.scoreRate10s = 0;
 
@@ -375,13 +465,24 @@
       const targetPips = Math.round(emptyCells * FRENZY_PIP_FRACTION);
       this.frenzyPipTarget = Math.max(FRENZY_PIP_MIN, Math.min(FRENZY_PIP_MAX, targetPips));
       this.trailGhosts = [];
-      this.bodyTossCharges = economy.ownsAbility('bodyToss') ? ABILITIES.bodyToss.charges : 0;
+      // Recompute max lives every run — Thick Hide levels bought since the
+      // last run can raise it (2->5); clamp current lives to it in case it
+      // would otherwise exceed the new max (§9b).
+      this.maxLives = computeMaxLives();
+      this.lives = economy.ownsAbility('bodyToss') ? this.maxLives : 0;
+      this.lives = Math.min(this.lives, this.maxLives);
+      this.bodyTossCooldownLeft = 0;
       this.phaseWallsTimeLeft = 0;
       this.phaseWallsCooldownLeft = 0;
+      this.permanentPhaseWalls = economy.skillNodeLevel('permeableScales') >= 1;
       this.biggerBiteTimeLeft = 0;
       this.biggerBiteCooldownLeft = 0;
+      this.permanentBiggerBite = economy.skillNodeLevel('perpetualMolt') >= 1;
       this.autoCollectRemaining = 0;
       this.autoCollectCooldownLeft = 0;
+      this.autoCollectCooldownSec = ABILITIES.autoCollect.cooldownSec;
+      this.activePlaySecondsBuffer = 0;
+      this.lifeRegenThreshold = economy.getState().stats.activePlaySeconds + rollLifeRegenWindowSec();
       this.scoreEvents = [];
       this.scoreRate10s = 0;
       this.tickInterval = BASE_INTERVAL_MS;
@@ -481,8 +582,41 @@
       if (this.autoCollectCooldownLeft > 0) {
         this.autoCollectCooldownLeft = Math.max(0, this.autoCollectCooldownLeft - dt);
       }
+      if (this.bodyTossCooldownLeft > 0) {
+        this.bodyTossCooldownLeft = Math.max(0, this.bodyTossCooldownLeft - dt);
+      }
+
+      // Active-play-time tracking for the life-regen popup (§9c). Buffered
+      // locally and flushed to economy.js in whole-second chunks rather
+      // than every frame, to avoid a localStorage write on every tick —
+      // mirrors the existing touchLastSeen()-on-interval pattern's intent
+      // (persist periodically, not on every mutation of a fast-changing
+      // value). Only reached while this.alive (see the early return above).
+      this.activePlaySecondsBuffer += dt;
+      if (this.activePlaySecondsBuffer >= 1) {
+        const whole = Math.floor(this.activePlaySecondsBuffer);
+        this.activePlaySecondsBuffer -= whole;
+        economy.addActivePlaySeconds(whole);
+        this.maybeRegenLife();
+      }
 
       this.renderFrame(time);
+    }
+
+    // Auto-applied, non-blocking life grant — see §9c. Checked against the
+    // persisted, ever-increasing stats.activePlaySeconds total; the
+    // threshold itself is a per-scene value (this.lifeRegenThreshold),
+    // redrawn from the current jittered window every time it fires,
+    // whether or not a life was actually granted (no stockpiling past
+    // max — the window is simply consumed).
+    maybeRegenLife() {
+      const total = economy.getState().stats.activePlaySeconds;
+      if (total < this.lifeRegenThreshold) return;
+      if (this.lives < this.maxLives) {
+        this.lives += 1;
+        emit('snake:lifeRegen', { lives: this.lives });
+      }
+      this.lifeRegenThreshold = total + rollLifeRegenWindowSec();
     }
 
     step() {
@@ -496,7 +630,7 @@
       let nx = head.x + vec.x;
       let ny = head.y + vec.y;
 
-      if (this.wrapMode || this.phaseWallsTimeLeft > 0) {
+      if (this.wrapMode || this.phaseWallsTimeLeft > 0 || this.permanentPhaseWalls) {
         nx = (nx + COLS) % COLS;
         ny = (ny + ROWS) % ROWS;
       } else if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
@@ -544,7 +678,7 @@
         if (this.autoCollectRemaining > 0) {
           this.autoCollectRemaining -= 1;
           if (this.autoCollectRemaining === 0) {
-            this.autoCollectCooldownLeft = ABILITIES.autoCollect.cooldownSec;
+            this.autoCollectCooldownLeft = this.autoCollectCooldownSec || computeAutoCollectTuning().cooldownSec;
             emit('snake:autoCollectDone', {});
           }
         }
@@ -637,31 +771,48 @@
     // -------------------------------------------------------------
 
     useBodyToss() {
-      if (!economy.ownsAbility('bodyToss') || this.bodyTossCharges <= 0 || !this.alive) return;
+      if (!economy.ownsAbility('bodyToss') || !this.alive) return;
+      // Two independent gates, both required (§8's closing note): a life
+      // available in the pool, AND the spend-rate cooldown expired. Pool
+      // size (lives/thickHide) and spend rate (cooldown/swiftRecoil) are
+      // deliberately orthogonal — neither substitutes for the other.
+      if (this.lives <= 0 || this.bodyTossCooldownLeft > 0) return;
+      // Proportional shrink (§9a): 30% of current length, mirroring
+      // CHILI's exact shrink-clamp shape so Body Toss can never reduce the
+      // snake below minLength (and is therefore never the direct cause of
+      // death), at any snake length.
       const shrinkAmt = Math.min(
-        ABILITIES.bodyToss.shrinkAmt,
+        Math.max(1, Math.ceil(this.snake.length * 0.3)),
         Math.max(0, this.snake.length - ABILITIES.bodyToss.minLength)
       );
       for (let i = 0; i < shrinkAmt; i++) this.snake.pop();
-      this.bodyTossCharges -= 1;
+      this.lives -= 1;
+      this.bodyTossCooldownLeft = computeBodyTossCooldownSec();
       audio.playBodyToss();
-      emit('snake:bodyToss', { chargesLeft: this.bodyTossCharges });
+      emit('snake:bodyToss', { livesLeft: this.lives });
     }
 
     usePhaseWalls() {
-      if (!economy.ownsAbility('phaseWalls') || !this.alive || this.phaseWallsCooldownLeft > 0) return;
-      this.phaseWallsTimeLeft = ABILITIES.phaseWalls.durationSec;
-      this.phaseWallsCooldownLeft = ABILITIES.phaseWalls.cooldownSec;
+      if (!economy.ownsAbility('phaseWalls') || !this.alive) return;
+      // Permeable Scales capstone: passive/always-on, no longer an
+      // activatable ability at all — refuse the manual trigger entirely.
+      if (this.permanentPhaseWalls || this.phaseWallsCooldownLeft > 0) return;
+      const { durationSec, cooldownSec } = computePhaseWallsTuning();
+      this.phaseWallsTimeLeft = durationSec;
+      this.phaseWallsCooldownLeft = cooldownSec;
       audio.playPhaseWalls();
-      emit('snake:phaseWalls', { duration: ABILITIES.phaseWalls.durationSec });
+      emit('snake:phaseWalls', { duration: durationSec });
     }
 
     useBiggerBite() {
-      if (!economy.ownsAbility('biggerBite') || !this.alive || this.biggerBiteCooldownLeft > 0) return;
-      this.biggerBiteTimeLeft = ABILITIES.biggerBite.durationSec;
-      this.biggerBiteCooldownLeft = ABILITIES.biggerBite.cooldownSec;
+      if (!economy.ownsAbility('biggerBite') || !this.alive) return;
+      // Perpetual Molt capstone: passive/always-on, no button, no cooldown.
+      if (this.permanentBiggerBite || this.biggerBiteCooldownLeft > 0) return;
+      const { durationSec, cooldownSec } = computeBiggerBiteTuning();
+      this.biggerBiteTimeLeft = durationSec;
+      this.biggerBiteCooldownLeft = cooldownSec;
       audio.playBiggerBite();
-      emit('snake:biggerBite', { duration: ABILITIES.biggerBite.durationSec });
+      emit('snake:biggerBite', { duration: durationSec });
     }
 
     useAutoCollect() {
@@ -671,7 +822,12 @@
         this.autoCollectCooldownLeft > 0 ||
         this.autoCollectRemaining > 0
       ) return;
-      this.autoCollectRemaining = ABILITIES.autoCollect.pickupCount;
+      // No capstone/always-on path here — intentional (§8): autopilot
+      // removing player agency is categorically different from a passive
+      // buff, so Auto-Collect only ever gets the reduction branch.
+      const { cooldownSec, pickupCount } = computeAutoCollectTuning();
+      this.autoCollectRemaining = pickupCount;
+      this.autoCollectCooldownSec = cooldownSec;
       audio.playAutoCollect();
       emit('snake:autoCollect', { remaining: this.autoCollectRemaining });
     }
@@ -713,7 +869,7 @@
     }
 
     computeAutoDirection() {
-      const canWrap = this.wrapMode || this.phaseWallsTimeLeft > 0;
+      const canWrap = this.wrapMode || this.phaseWallsTimeLeft > 0 || this.permanentPhaseWalls;
 
       const candidates = Object.keys(DIRS).filter((d) => {
         if (this.snake.length > 1 && d === OPPOSITE[this.dir]) return false;
@@ -870,7 +1026,7 @@
       // Bigger Bite is purely a render-time effect: segments are drawn
       // scaled up around each cell's center. Grid coordinates / hitboxes
       // (this.snake) are never touched, so collision logic is unaffected.
-      const biggerBiteActive = this.biggerBiteTimeLeft > 0;
+      const biggerBiteActive = this.biggerBiteTimeLeft > 0 || this.permanentBiggerBite;
       const biteSize = (CELL - 2) * ABILITIES.biggerBite.scale;
       this.snake.forEach((seg, i) => {
         g.fillStyle(i === 0 ? headColor : bodyColor, 1);

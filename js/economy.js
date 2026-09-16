@@ -167,8 +167,8 @@
     // ability unlocks (kept at their live, unscaled costs — currency/unlock
     // side only, gameplay tuning stays in game.js's ABILITIES const, same
     // split as before). Tier 2-4 are new cooldown-reduction/always-on
-    // nodes — purchasable and persisted here, but NOT wired into game.js
-    // yet (effect not yet wired — see docs/game-theory-design.md §8).
+    // nodes — purchasable/persisted here, and wired into game.js's
+    // ABILITIES tuning helpers (see docs/game-theory-design.md §8).
     abilities: {
       id: 'abilities',
       name: 'Branch B — Abilities & Cooldowns',
@@ -178,39 +178,39 @@
         { id: 'biggerBite', name: 'Bigger Bite', desc: 'Grow larger for a few seconds, on a cooldown', baseCost: 3500, costMultiplier: 1, maxLevel: 1, currency: 'coins', prereq: null },
         { id: 'autoCollect', name: 'Auto-Collect', desc: 'Auto-steer to the next 5 pickups, then hand control back — on a cooldown', baseCost: 17500, costMultiplier: 1, maxLevel: 1, currency: 'coins', prereq: null },
         {
-          id: 'swiftRecoil', name: 'Swift Recoil', desc: 'Body Toss cooldown 120s → 60s floor (-10s/lvl)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'swiftRecoil', name: 'Swift Recoil', desc: 'Body Toss cooldown 120s → 60s floor (-10s/lvl)', // wired in game.js (computeBodyTossCooldownSec) — see §8
           baseCost: 300 * CALIBRATION_K_COINS, costMultiplier: 1.18, maxLevel: 6, currency: 'coins', prereq: { nodeId: 'bodyToss' },
         },
         {
-          id: 'thinnerWalls', name: 'Thinner Walls', desc: 'Phase Walls cooldown 25s → 10s (-3s/lvl)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'thinnerWalls', name: 'Thinner Walls', desc: 'Phase Walls cooldown 25s → 10s (-3s/lvl)', // wired in game.js (computePhaseWallsTuning) — see §8
           baseCost: 400 * CALIBRATION_K_COINS, costMultiplier: 1.15, maxLevel: 5, currency: 'coins', prereq: { nodeId: 'phaseWalls' },
         },
         {
-          id: 'longerFangs', name: 'Longer Fangs', desc: 'Bigger Bite cooldown 20s → 10s (-2s/lvl)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'longerFangs', name: 'Longer Fangs', desc: 'Bigger Bite cooldown 20s → 10s (-2s/lvl)', // wired in game.js (computeBiggerBiteTuning) — see §8
           baseCost: 350 * CALIBRATION_K_COINS, costMultiplier: 1.15, maxLevel: 5, currency: 'coins', prereq: { nodeId: 'biggerBite' },
         },
         {
-          id: 'extendedInstinct', name: 'Extended Instinct', desc: 'Auto-Collect cooldown 30s → 15s (-3s/lvl)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'extendedInstinct', name: 'Extended Instinct', desc: 'Auto-Collect cooldown 30s → 15s (-3s/lvl)', // wired in game.js (computeAutoCollectTuning) — see §8
           baseCost: 500 * CALIBRATION_K_COINS, costMultiplier: 1.15, maxLevel: 5, currency: 'coins', prereq: { nodeId: 'autoCollect' },
         },
         {
-          id: 'porousScales', name: 'Porous Scales', desc: 'Phase Walls cooldown → 0s, duration → 16s (100% uptime)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'porousScales', name: 'Porous Scales', desc: 'Phase Walls cooldown → 0s, duration → 16s (100% uptime)', // wired in game.js (computePhaseWallsTuning) — see §8
           baseCost: 1200 * CALIBRATION_K_POINTS, costMultiplier: 1.35, maxLevel: 5, currency: 'points', prereq: { nodeId: 'thinnerWalls', minLevel: 5 },
         },
         {
-          id: 'ravenousForm', name: 'Ravenous Form', desc: 'Bigger Bite cooldown → 0s, duration → 10s (100% uptime)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'ravenousForm', name: 'Ravenous Form', desc: 'Bigger Bite cooldown → 0s, duration → 10s (100% uptime)', // wired in game.js (computeBiggerBiteTuning) — see §8
           baseCost: 1000 * CALIBRATION_K_POINTS, costMultiplier: 1.35, maxLevel: 5, currency: 'points', prereq: { nodeId: 'longerFangs', minLevel: 5 },
         },
         {
-          id: 'relentlessPursuit', name: 'Relentless Pursuit', desc: 'Auto-Collect cooldown 15s → 8s floor, pickups 5 → 7', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'relentlessPursuit', name: 'Relentless Pursuit', desc: 'Auto-Collect cooldown 15s → 8s floor, pickups 5 → 7', // wired in game.js (computeAutoCollectTuning) — see §8
           baseCost: 1500 * CALIBRATION_K_POINTS, costMultiplier: 1.30, maxLevel: 4, currency: 'points', prereq: { nodeId: 'extendedInstinct', minLevel: 5 },
         },
         {
-          id: 'permeableScales', name: 'Permeable Scales', desc: 'Phase Walls becomes passive/always-on (capstone)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'permeableScales', name: 'Permeable Scales', desc: 'Phase Walls becomes passive/always-on (capstone)', // wired in game.js (this.permanentPhaseWalls) — see §8
           baseCost: 5000 * CALIBRATION_K_POINTS, costMultiplier: 1, maxLevel: 1, currency: 'points', prereq: { nodeId: 'porousScales', minLevel: 5 },
         },
         {
-          id: 'perpetualMolt', name: 'Perpetual Molt', desc: 'Bigger Bite becomes passive/always-on (capstone)', // effect not yet wired — see docs/game-theory-design.md §8
+          id: 'perpetualMolt', name: 'Perpetual Molt', desc: 'Bigger Bite becomes passive/always-on (capstone)', // wired in game.js (this.permanentBiggerBite) — see §8
           baseCost: 4500 * CALIBRATION_K_POINTS, costMultiplier: 1, maxLevel: 1, currency: 'points', prereq: { nodeId: 'ravenousForm', minLevel: 5 },
         },
       ],
@@ -247,18 +247,18 @@
     },
     // Branch D — Vitality. Same as Branch C: §5's table has no per-node
     // Prereq column beyond the implicit Root gate. Purchasable/persisted
-    // here; effects NOT wired into game.js yet (effect not yet wired —
-    // see docs/game-theory-design.md §9).
+    // here, and wired into game.js's lives/regen logic (see
+    // docs/game-theory-design.md §9).
     vitality: {
       id: 'vitality',
       name: 'Branch D — Vitality',
       nodes: [
         {
-          id: 'thickHide', name: 'Thick Hide', desc: '+1 max Body Toss life per level (2 → 5 total)', // effect not yet wired — see docs/game-theory-design.md §9
+          id: 'thickHide', name: 'Thick Hide', desc: '+1 max Body Toss life per level (2 → 5 total)', // wired in game.js (computeMaxLives) — see §9
           baseCost: 2500 * CALIBRATION_K_COINS, costMultiplier: 1.6, maxLevel: 3, currency: 'coins', prereq: null,
         },
         {
-          id: 'quickRegeneration', name: 'Quick Regeneration', desc: 'Tightens the life-regen popup window by 30s/lvl', // effect not yet wired — see docs/game-theory-design.md §9
+          id: 'quickRegeneration', name: 'Quick Regeneration', desc: 'Tightens the life-regen popup window by 30s/lvl', // wired in game.js (rollLifeRegenWindowSec) — see §9
           baseCost: 1800 * CALIBRATION_K_POINTS, costMultiplier: 1.4, maxLevel: 3, currency: 'points', prereq: null,
         },
       ],
@@ -340,6 +340,7 @@
         maxLength: 3,
         lifetimeCoinsEarned: 0,
         lifetimeScore: 0,
+        activePlaySeconds: 0,
       },
       highScores: [], // [{score, date}]
       lastSeen: Date.now(),
@@ -412,6 +413,19 @@
     state.economy.points -= amount;
     save();
     return true;
+  }
+
+  // ---------------------------------------------------------------------
+  // Active-play time — accumulated only while a run is alive (see
+  // game.js's update()), used by the Body Toss life-regen popup timer
+  // (docs/game-theory-design.md §9c). Mirrored in from game.js periodically
+  // rather than every frame, to avoid a localStorage write on every tick.
+  // ---------------------------------------------------------------------
+
+  function addActivePlaySeconds(amount) {
+    if (amount <= 0) return;
+    state.stats.activePlaySeconds += amount;
+    save();
   }
 
   // ---------------------------------------------------------------------
@@ -781,6 +795,7 @@
     spendCoins,
     addPoints,
     spendPoints,
+    addActivePlaySeconds,
     rollGolden,
     goldenReward,
     computeIdleReward,
