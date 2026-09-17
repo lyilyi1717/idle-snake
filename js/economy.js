@@ -217,8 +217,11 @@
     },
     // Branch C — Economy. §5's table has no per-node Prereq column beyond
     // the implicit Root gate, so every node here only requires Root owned.
-    // Purchasable/persisted here; effects NOT wired into game.js/economy.js
-    // gameplay logic yet (effect not yet wired — see docs/game-theory-design.md §7).
+    // Purchasable/persisted here; luckyScales/heavyPockets/frugalForager/
+    // idleMasteryII effects are NOT wired into game.js/economy.js gameplay
+    // logic yet (still "effect not yet wired" per-node below — see
+    // docs/game-theory-design.md §7). serpentsFortune IS wired — see its
+    // own comment below and serpentsFortuneDivisorMultiplier() above.
     economyBranch: {
       id: 'economyBranch',
       name: 'Branch C — Economy',
@@ -240,7 +243,7 @@
           baseCost: 350 * CALIBRATION_K_COINS, costMultiplier: 1.13, maxLevel: 5, currency: 'coins', prereq: null,
         },
         {
-          id: 'serpentsFortune', name: "Serpent's Fortune", desc: 'Tightens all High-Score Momentum divisors by 15% (capstone)', // effect not yet wired — see docs/game-theory-design.md §7
+          id: 'serpentsFortune', name: "Serpent's Fortune", desc: 'Tightens all High-Score Momentum divisors by 15% (capstone)', // wired in economy.js (serpentsFortuneDivisorMultiplier(), read by momentumFactor()) — see §7
           baseCost: 2500 * CALIBRATION_K_POINTS, costMultiplier: 1, maxLevel: 1, currency: 'points', prereq: null,
         },
       ],
@@ -280,8 +283,39 @@
       check: (s) => s.stats.maxLength >= 20 },
     { id: 'survivor', name: 'Survivor', desc: 'Play 10 games', coins: 20,
       check: (s) => s.stats.gamesPlayed >= 10 },
-    { id: 'coin_collector', name: 'Coin Collector', desc: 'Earn 500 Snake Coins total (lifetime)', coins: 30,
-      check: (s) => s.stats.lifetimeCoinsEarned >= 500 },
+    // 'coin_collector' (500 lifetime coins, +30 coins) retired now that
+    // Rank ships — Coin Rank Tier 3 (Golden Forager, 1,000 lifetime coins)
+    // directly supersedes it. See docs/game-theory-design.md §3's note.
+  ];
+
+  // ---------------------------------------------------------------------
+  // Rank — order-of-magnitude milestone ladders (docs/game-theory-design.md
+  // §3). Two independent, ×10-spaced ladders, each granting a small
+  // one-time coin reward the first time its threshold is crossed.
+  // `state.economy.unlockedRankTiers` (mirrors `unlockedAchievements`)
+  // prevents re-granting a tier's reward on reload or re-crossing.
+  // ---------------------------------------------------------------------
+
+  const RANK_TIERS_COINS = [
+    { id: 'coinRank1', tier: 1, threshold: 10, name: 'Crumb Finder', reward: 5 },
+    { id: 'coinRank2', tier: 2, threshold: 100, name: 'Apple Scout', reward: 15 },
+    { id: 'coinRank3', tier: 3, threshold: 1000, name: 'Golden Forager', reward: 50 },
+    { id: 'coinRank4', tier: 4, threshold: 10000, name: 'Coin Serpent', reward: 150 },
+    { id: 'coinRank5', tier: 5, threshold: 100000, name: 'Vault Viper', reward: 500 },
+    { id: 'coinRank6', tier: 6, threshold: 1000000, name: 'Pixel Tycoon', reward: 1500 },
+    { id: 'coinRank7', tier: 7, threshold: 10000000, name: 'Mythic Coil', reward: 5000 },
+  ];
+
+  // Score Rank rewards pay out in COINS, not points — deliberately, so the
+  // points-only economy (§6) never gets a side-channel top-up from a
+  // system that's just measuring points already earned/spent. See §3.
+  const RANK_TIERS_SCORE = [
+    { id: 'scoreRank1', tier: 1, threshold: 1000, name: 'Sprout', reward: 10 },
+    { id: 'scoreRank2', tier: 2, threshold: 10000, name: 'Vine', reward: 30 },
+    { id: 'scoreRank3', tier: 3, threshold: 100000, name: 'Python', reward: 100 },
+    { id: 'scoreRank4', tier: 4, threshold: 1000000, name: 'Anaconda', reward: 300 },
+    { id: 'scoreRank5', tier: 5, threshold: 10000000, name: 'Leviathan', reward: 1000 },
+    { id: 'scoreRank6', tier: 6, threshold: 100000000, name: 'Ouroboros', reward: 3000 },
   ];
 
   // ---------------------------------------------------------------------
@@ -308,6 +342,21 @@
     bestScoreDivisor: 150,
   };
 
+  // High-Score Momentum — active-play coin sources scaled by bestScore,
+  // capped (unlike idle, which is time-bounded instead). See
+  // docs/game-theory-design.md §7. `serpentsFortune` (Branch C capstone)
+  // tightens every divisor below by 15% — implemented as a single
+  // multiplier applied at the one place these divisors are read
+  // (momentumFactor()), not as two hardcoded constant sets.
+  const MOMENTUM = {
+    goldenDivisor: 300,
+    goldenCap: 900,
+    chiliDivisor: 450,
+    chiliCap: 900,
+    runEndDivisor: 250,
+    runEndCap: 1000,
+  };
+
   const HIGH_SCORE_LIMIT = 10;
 
   // ---------------------------------------------------------------------
@@ -330,6 +379,7 @@
         unlockedTrails: ['none'],
         ownedUpgrades: [],
         unlockedAchievements: [],
+        unlockedRankTiers: [],
         skillLevels: {},
       },
       stats: {
@@ -386,6 +436,7 @@
     state.economy.coins += amount;
     state.stats.lifetimeCoinsEarned += amount;
     save();
+    checkRankTiers();
   }
 
   function spendCoins(amount) {
@@ -406,6 +457,7 @@
     state.economy.points += amount;
     state.stats.lifetimeScore += amount;
     save();
+    checkRankTiers();
   }
 
   function spendPoints(amount) {
@@ -458,8 +510,36 @@
     return hit;
   }
 
+  // serpentsFortuneDivisorMultiplier() — the single multiplier applied
+  // wherever a High-Score Momentum divisor is read (see momentumFactor()
+  // below). Buying the Serpent's Fortune capstone (Branch C) tightens
+  // every momentum divisor by 15% at once.
+  function serpentsFortuneDivisorMultiplier() {
+    return skillNodeLevel('serpentsFortune') >= 1 ? 0.85 : 1;
+  }
+
+  // momentumFactor(divisor, cap) — shared High-Score Momentum helper
+  // (docs/game-theory-design.md §7). bestScore is clamped to `cap` before
+  // dividing, so active-play sources (unlike idle) can never run away
+  // over an arbitrarily long single run.
+  function momentumFactor(divisor, cap) {
+    const bs = Math.min(state.stats.bestScore, cap);
+    const effectiveDivisor = divisor * serpentsFortuneDivisorMultiplier();
+    return 1 + bs / effectiveDivisor;
+  }
+
   function goldenReward() {
-    return randInt(GOLDEN.minCoinReward, GOLDEN.maxCoinReward);
+    const f = momentumFactor(MOMENTUM.goldenDivisor, MOMENTUM.goldenCap);
+    return randInt(Math.round(5 * f), Math.round(20 * f));
+  }
+
+  // chiliCoinBonus() — NEW mechanic: chili previously granted zero coins
+  // (score only). This adds a small, deliberately-small coin award
+  // alongside chili's existing score behavior, scaled by the same
+  // momentum pattern as golden apples. See §7.
+  function chiliCoinBonus() {
+    const f = momentumFactor(MOMENTUM.chiliDivisor, MOMENTUM.chiliCap);
+    return randInt(Math.round(1 * f), Math.round(4 * f));
   }
 
   // ---------------------------------------------------------------------
@@ -740,6 +820,75 @@
   }
 
   // ---------------------------------------------------------------------
+  // Rank tiers — checked at the same points achievements are (see
+  // checkAchievements() above, plus the addCoins()/addPoints() hooks so a
+  // tier's reward lands the instant it's earned, mid-run, without ever
+  // requiring the player to open a menu). Grants each newly-crossed tier's
+  // one-time coin reward exactly once, guarded against re-entrant
+  // recursion (granting a reward itself goes through addCoins(), which
+  // calls checkRankTiers() again).
+  // ---------------------------------------------------------------------
+
+  let checkingRankTiers = false;
+  function checkRankTiers() {
+    if (checkingRankTiers) return [];
+    checkingRankTiers = true;
+    try {
+      const newlyUnlocked = [];
+      const grant = (tier) => {
+        state.economy.unlockedRankTiers.push(tier.id);
+        addCoins(tier.reward);
+        newlyUnlocked.push(tier);
+      };
+      RANK_TIERS_COINS.forEach((tier) => {
+        if (state.economy.unlockedRankTiers.includes(tier.id)) return;
+        if (state.stats.lifetimeCoinsEarned >= tier.threshold) grant(tier);
+      });
+      RANK_TIERS_SCORE.forEach((tier) => {
+        if (state.economy.unlockedRankTiers.includes(tier.id)) return;
+        if (state.stats.lifetimeScore >= tier.threshold) grant(tier);
+      });
+      if (newlyUnlocked.length) save();
+      return newlyUnlocked;
+    } finally {
+      checkingRankTiers = false;
+    }
+  }
+
+  // rankTierProgress(tiers, currentValue) — { currentTier, nextTier } for
+  // one ladder, derived directly from `currentValue` against each tier's
+  // threshold (NOT from `unlockedRankTiers`, which only exists to gate
+  // one-time reward granting — deriving progress from the stat itself
+  // keeps the Badges-modal panel correct even if it's ever read before
+  // checkRankTiers() has had a chance to run, e.g. right after a save
+  // migration). currentTier is the highest tier whose threshold is
+  // already met (or null if none yet); nextTier is the first one not yet
+  // met (or null once every tier in the ladder is met).
+  function rankTierProgress(tiers, currentValue) {
+    let currentTier = null;
+    let nextTier = null;
+    for (const tier of tiers) {
+      if (currentValue >= tier.threshold) {
+        currentTier = tier;
+      } else {
+        nextTier = tier;
+        break;
+      }
+    }
+    return { currentTier, nextTier };
+  }
+
+  function coinRankProgress() {
+    const currentValue = state.stats.lifetimeCoinsEarned;
+    return Object.assign({ currentValue }, rankTierProgress(RANK_TIERS_COINS, currentValue));
+  }
+
+  function scoreRankProgress() {
+    const currentValue = state.stats.lifetimeScore;
+    return Object.assign({ currentValue }, rankTierProgress(RANK_TIERS_SCORE, currentValue));
+  }
+
+  // ---------------------------------------------------------------------
   // Run-end bookkeeping
   // ---------------------------------------------------------------------
 
@@ -751,14 +900,17 @@
     state.stats.maxLength = Math.max(state.stats.maxLength, length);
 
     // Flat end-of-run coin bonus so ordinary play (not just golden-apple
-    // luck) always earns something toward cosmetics.
-    const bonus = Math.floor(score / 25);
+    // luck) always earns something toward cosmetics — scaled by the same
+    // High-Score Momentum factor as goldens/chili (§7).
+    const momentum = momentumFactor(MOMENTUM.runEndDivisor, MOMENTUM.runEndCap);
+    const bonus = Math.floor((score / 25) * momentum);
     if (bonus > 0) addCoins(bonus);
 
     const isHighScore = insertHighScore(score);
     const newAchievements = checkAchievements();
+    const newRankTiers = checkRankTiers();
     save();
-    return { bonus, isHighScore, newAchievements };
+    return { bonus, isHighScore, newAchievements, newRankTiers };
   }
 
   function insertHighScore(score) {
@@ -786,6 +938,8 @@
     UPGRADES,
     SKILL_TREE,
     ACHIEVEMENTS,
+    RANK_TIERS_COINS,
+    RANK_TIERS_SCORE,
     MOCK_STORE,
     load,
     save,
@@ -798,6 +952,11 @@
     addActivePlaySeconds,
     rollGolden,
     goldenReward,
+    chiliCoinBonus,
+    momentumFactor,
+    checkRankTiers,
+    coinRankProgress,
+    scoreRankProgress,
     computeIdleReward,
     currentIdleRate,
     claimIdleReward,

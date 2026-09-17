@@ -59,6 +59,10 @@
     return `≈${perMin.toFixed(2)} coins/min`;
   }
 
+  function fmtNum(n) {
+    return Math.floor(n).toLocaleString();
+  }
+
   // ---------------------------------------------------------------------
   // Status bar
   // ---------------------------------------------------------------------
@@ -370,7 +374,34 @@
   // Badges
   // ---------------------------------------------------------------------
 
+  // rankLineHtml(label, progress) — one thin progress line for the §2c
+  // milestone panel. `progress` is { currentTier, nextTier, currentValue }
+  // as returned by economy.coinRankProgress()/scoreRankProgress().
+  function rankLineHtml(label, progress) {
+    const { currentTier, nextTier, currentValue } = progress;
+    const curLabel = currentTier ? `${currentTier.name} (Lv${currentTier.tier})` : 'Unranked';
+    if (!nextTier) {
+      return `<div class="rank-line"><div class="rank-label">${label}: ${curLabel} — MAX</div></div>`;
+    }
+    const pct = Math.max(0, Math.min(100, (currentValue / nextTier.threshold) * 100));
+    return `<div class="rank-line">
+        <div class="rank-label">${label}: ${curLabel} — ${fmtNum(currentValue)} / ${fmtNum(nextTier.threshold)} → ${nextTier.name}</div>
+        <div class="rank-bar-outer"><div class="rank-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      </div>`;
+  }
+
+  // Milestone progress panel (docs/game-theory-design.md §2c) — sits above
+  // the achievement checklist in the same Badges modal. Re-rendered
+  // whenever renderBadges() runs (on modal open, and on gameover if the
+  // modal happens to already be open).
+  function renderRankProgress() {
+    const coin = economy.coinRankProgress();
+    const score = economy.scoreRankProgress();
+    $('rankPanel').innerHTML = rankLineHtml('Coin Rank', coin) + rankLineHtml('Score Rank', score);
+  }
+
   function renderBadges() {
+    renderRankProgress();
     const state = economy.getState();
     const html = economy.ACHIEVEMENTS.map((ach) => {
       const unlocked = state.economy.unlockedAchievements.includes(ach.id);
@@ -523,7 +554,8 @@
     });
 
     bus.addEventListener('snake:chili', (e) => {
-      showToast(`Chili! Snake shrinks — Score ×${e.detail.multiplier.toFixed(2)}`, 1600);
+      const coinsBit = e.detail.coins > 0 ? ` (+${e.detail.coins} coins)` : '';
+      showToast(`Chili! Snake shrinks — Score ×${e.detail.multiplier.toFixed(2)}${coinsBit}`, 1600);
       updateStatusBar(lastScore);
     });
 
@@ -579,6 +611,10 @@
         audio.playAchievement();
         showToast(`Badge unlocked: ${e.detail.newAchievements[0].name}`, 2200);
       }
+      // Milestone progress bar (§2c): if the Badges modal happens to be
+      // open already, refresh it so a Rank-up crossed by this run's final
+      // score/coin gain shows up immediately rather than on next open.
+      if (!$('badgesModal').classList.contains('hidden')) renderBadges();
       renderAbilityButtons();
     });
 

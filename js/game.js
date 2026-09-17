@@ -744,9 +744,15 @@
         Math.round(this.scoreMultiplier * CHILI.multiplierStep * 100) / 100
       );
       this.addScore(Math.round(5 * this.effectiveMultiplier()));
+      // Small NEW coin bonus alongside chili's existing score-only
+      // behavior, scaled by High-Score Momentum — see
+      // docs/game-theory-design.md §7. Deliberately small ([1,4] base)
+      // relative to golden apples ([5,20] base).
+      const chiliCoins = economy.chiliCoinBonus();
+      economy.addCoins(chiliCoins);
       this.chiliGlow = 1; // brief pulse on top of the persistent multiplier tint
       audio.playChili();
-      emit('snake:chili', { multiplier: this.scoreMultiplier, shrinkAmt });
+      emit('snake:chili', { multiplier: this.scoreMultiplier, shrinkAmt, coins: chiliCoins });
     }
 
     eatBuff() {

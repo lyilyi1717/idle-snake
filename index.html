@@ -249,6 +249,27 @@
   .modal .row .meta .name { font-weight: 700; color: #1f2b18; display: block; }
   .modal .row .meta .desc { font-size: 9px; }
 
+  .rank-panel {
+    background: #d4dcc4;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .rank-line { margin-bottom: 6px; }
+  .rank-line:last-child { margin-bottom: 0; }
+  .rank-label { font-size: 9px; color: #1f2b18; margin-bottom: 4px; }
+  .rank-bar-outer {
+    height: 6px;
+    border-radius: 3px;
+    background: #b7c19f;
+    overflow: hidden;
+  }
+  .rank-bar-fill {
+    height: 100%;
+    background: #4a5a32;
+    border-radius: 3px;
+  }
+
   .modal button.action {
     border: none;
     border-radius: 8px;
@@ -575,6 +596,7 @@
 <div class="modal-backdrop hidden" id="badgesModal">
   <div class="modal">
     <h2>Badges</h2>
+    <div id="rankPanel" class="rank-panel"></div>
     <div id="badgesList"></div>
     <button class="close-btn" data-close="badgesModal">Close</button>
   </div>
