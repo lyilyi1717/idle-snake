@@ -427,6 +427,25 @@
     save();
   }
 
+  // Wipes the save file entirely. Callers are expected to reload the page
+  // right after this so every OTHER module (game.js/ui.js) reinitializes
+  // from defaultState() — this function doesn't try to hand-reset their
+  // live fields, since a full reload is simpler and far less error-prone
+  // than doing that across dozens of fields without missing one.
+  //
+  // It DOES reset economy.js's own in-memory `state`, though — not just
+  // the storage key. A bare storage.remove() left a window between click
+  // and actual navigation (the 'beforeunload' handler in ui.js calls
+  // touchLastSeen() -> save(), and reload() itself isn't instant) where
+  // anything that still called save() would silently resurrect the old
+  // state under STATE_KEY right before the new page's load() ran, making
+  // the reset a no-op. Resetting `state` here means any such save() just
+  // persists a fresh default state instead.
+  function resetProgress() {
+    state = defaultState();
+    storage.remove(STATE_KEY);
+  }
+
   // ---------------------------------------------------------------------
   // Coins
   // ---------------------------------------------------------------------
@@ -944,6 +963,7 @@
     load,
     save,
     touchLastSeen,
+    resetProgress,
     getState: () => state,
     addCoins,
     spendCoins,

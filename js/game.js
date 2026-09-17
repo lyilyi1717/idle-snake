@@ -260,6 +260,37 @@
     return min + Math.random() * (max - min);
   }
 
+  // Score-phase snake colors — visual-only progression tied to THIS RUN's
+  // score (this.score), reset every run at startGame(). Thresholds are
+  // deliberately chosen to line up with pacing landmarks the game already
+  // uses: SPEEDUP_EVERY_SCORE (40) puts the first speed-up inside
+  // "Awakened", and the score_50/score_150/score_300 ACHIEVEMENTS land at
+  // "Awakened"/"Thriving"/the start of "Blazing" respectively. Colors are
+  // picked to stay legible against all 4 skins' backgrounds (classic olive
+  // 0x9bab77, amber 0xdcb14a, ice blue 0xaad4dc, inverted night 0x1a1f14) —
+  // see currentPhaseColor()/renderFrame(), which lerp the chili tint FROM
+  // whichever phase color is active rather than always from skin.snake*.
+  const SCORE_PHASES = [
+    { min: 0, name: 'Hatchling', head: 0x464646, body: 0x2e2e2e },
+    { min: 10, name: 'Awakened', head: 0x4d7fe6, body: 0x2456c2 },
+    { min: 100, name: 'Thriving', head: 0x3fd15f, body: 0x1e8f3a },
+    { min: 300, name: 'Blazing', head: 0xffce3f, body: 0xb8860b },
+    { min: 600, name: 'Molten', head: 0xff8c42, body: 0xd9581a },
+    { min: 1000, name: 'Apex', head: 0xff4040, body: 0xb31217 },
+  ];
+
+  function phaseForScore(score) {
+    // SCORE_PHASES is sorted ascending by `min`, so the first entry whose
+    // min exceeds the score means every later entry would too — the
+    // previously-matched phase is the correct (highest-min-that-fits) one.
+    let phase = SCORE_PHASES[0];
+    for (const p of SCORE_PHASES) {
+      if (score >= p.min) phase = p;
+      else break;
+    }
+    return phase;
+  }
+
   function lerpColor(colorA, colorB, t) {
     t = Math.max(0, Math.min(1, t));
     const ar = (colorA >> 16) & 0xff, ag = (colorA >> 8) & 0xff, ab = colorA & 0xff;
@@ -298,6 +329,7 @@
       this.dir = 'right';
       this.nextDir = 'right';
       this.food = null;
+      this.foodTwin = null;
       this.score = 0;
       this.applesEaten = 0;
       this.goldenApplesEaten = 0;
@@ -448,6 +480,8 @@
       ];
       this.dir = 'right';
       this.nextDir = 'right';
+      this.food = null;
+      this.foodTwin = null;
       this.score = 0;
       this.applesEaten = 0;
       this.goldenApplesEaten = 0;
@@ -517,6 +551,35 @@
       const buff = !golden && !chili && rollBuff();
       const frenzy = !golden && !chili && !buff && rollFrenzy();
       this.food = { x, y, golden, chili, buff, frenzy };
+
+      // Golden/chili/buff spawns also get an identical "twin" copy at a
+      // second empty cell — a genuine spatial choice between two
+      // indistinguishable pickups. Plain apples and frenzy triggers never
+      // get a twin (frenzy already puts many pips on the board by design).
+      if (golden || chili || buff) {
+        const twinPos = this.pickSecondEmptyCell(x, y);
+        this.foodTwin = { x: twinPos.x, y: twinPos.y, golden, chili, buff, frenzy: false };
+      } else {
+        this.foodTwin = null;
+      }
+    }
+
+    // Finds a second empty cell for a food twin, using the same
+    // non-overlap logic as the primary cell in spawnFood() above, plus
+    // exclusion of that primary cell itself so the twin never lands on
+    // top of it.
+    pickSecondEmptyCell(excludeX, excludeY) {
+      let x, y;
+      let attempts = 0;
+      do {
+        x = Phaser.Math.Between(0, COLS - 1);
+        y = Phaser.Math.Between(0, ROWS - 1);
+        attempts += 1;
+      } while (
+        (this.snake.some((s) => s.x === x && s.y === y) || (x === excludeX && y === excludeY)) &&
+        attempts < 500
+      );
+      return { x, y };
     }
 
     spawnFrenzyPips() {
@@ -638,7 +701,9 @@
         return;
       }
 
-      const willEat = this.food && nx === this.food.x && ny === this.food.y;
+      const eatingPrimary = this.food && nx === this.food.x && ny === this.food.y;
+      const eatingTwin = !eatingPrimary && this.foodTwin && nx === this.foodTwin.x && ny === this.foodTwin.y;
+      const willEat = eatingPrimary || eatingTwin;
       const bodyToCheck = willEat ? this.snake : this.snake.slice(0, -1);
       if (bodyToCheck.some((s) => s.x === nx && s.y === ny)) {
         this.die();
@@ -652,19 +717,28 @@
       this.snake.unshift({ x: nx, y: ny });
 
       if (willEat) {
+        // Whichever copy (primary or twin) the head landed on this tick is
+        // "the one eaten" — apply the effect from its flags (identical to
+        // the primary's when a twin exists). Clear the twin immediately so
+        // it can never linger to be collected for a second reward on a
+        // later tick; spawnFood() below fully replaces both this.food and
+        // this.foodTwin anyway, but this makes the invariant explicit and
+        // holds even if that call is ever reordered.
+        const eaten = eatingTwin ? this.foodTwin : this.food;
+        this.foodTwin = null;
         this.applesEaten += 1;
-        if (this.food.golden) {
+        if (eaten.golden) {
           this.goldenApplesEaten += 1;
           this.addScore(Math.round(15 * this.effectiveMultiplier()));
           const coins = economy.goldenReward();
           economy.addCoins(coins);
           audio.playGolden();
           emit('snake:golden', { coins });
-        } else if (this.food.chili) {
+        } else if (eaten.chili) {
           this.eatChili();
-        } else if (this.food.buff) {
+        } else if (eaten.buff) {
           this.eatBuff();
-        } else if (this.food.frenzy) {
+        } else if (eaten.frenzy) {
           this.eatFrenzy();
         } else {
           this.addScore(Math.round(10 * this.effectiveMultiplier()));
@@ -968,47 +1042,11 @@
       // Trail cosmetic effect (behind the snake).
       this.renderTrail(g, skin);
 
-      // Food.
-      if (this.food) {
-        if (this.food.golden) {
-          const pulse = 0.55 + 0.45 * Math.sin(time / 120);
-          g.fillStyle(skin.golden, 0.65 + 0.35 * pulse);
-          const pad = 1 + pulse * 1.5;
-          g.fillRect(
-            this.food.x * CELL + pad, this.food.y * CELL + pad,
-            CELL - pad * 2, CELL - pad * 2
-          );
-        } else if (this.food.chili) {
-          const flicker = 0.5 + 0.5 * Math.sin(time / 90);
-          g.fillStyle(CHILI.tintColor, 0.85);
-          g.fillRect(this.food.x * CELL + 2, this.food.y * CELL + 2, CELL - 4, CELL - 4);
-          g.fillStyle(skin.bg, 0.3 + 0.3 * flicker);
-          g.fillRect(this.food.x * CELL + 4, this.food.y * CELL + 4, CELL - 8, CELL - 8);
-        } else if (this.food.buff) {
-          // Fast pulse, diamond-ish inset — reads distinct from the
-          // square golden pulse and the flickering chili.
-          const pulse = 0.5 + 0.5 * Math.sin(time / 70);
-          g.fillStyle(BUFF.tintColor, 0.75 + 0.25 * pulse);
-          const pad = 1 + pulse * 2;
-          g.fillRect(
-            this.food.x * CELL + pad, this.food.y * CELL + pad,
-            CELL - pad * 2, CELL - pad * 2
-          );
-          g.fillStyle(skin.bg, 0.5);
-          g.fillRect(this.food.x * CELL + CELL / 2 - 1, this.food.y * CELL + 2, 2, CELL - 4);
-        } else if (this.food.frenzy) {
-          // Slow, wide pulse with a ring outline so it reads as "many
-          // points incoming" rather than another golden apple.
-          const pulse = 0.5 + 0.5 * Math.sin(time / 150);
-          g.fillStyle(FRENZY.tintColor, 0.5 + 0.3 * pulse);
-          g.fillRect(this.food.x * CELL + 2, this.food.y * CELL + 2, CELL - 4, CELL - 4);
-          g.lineStyle(1, FRENZY.tintColor, 0.9);
-          g.strokeRect(this.food.x * CELL + 1, this.food.y * CELL + 1, CELL - 2, CELL - 2);
-        } else {
-          g.fillStyle(skin.food, 1);
-          g.fillRect(this.food.x * CELL + 2, this.food.y * CELL + 2, CELL - 4, CELL - 4);
-        }
-      }
+      // Food — primary and (when present) its identical twin get the exact
+      // same visual treatment via renderFoodItem(), so the two are
+      // indistinguishable to the player.
+      if (this.food) this.renderFoodItem(g, skin, time, this.food);
+      if (this.foodTwin) this.renderFoodItem(g, skin, time, this.foodTwin);
 
       // Frenzy pips — small, cheap-to-draw bonus markers active alongside
       // the normal food for the duration of a frenzy window.
@@ -1027,8 +1065,9 @@
       // rides on top of that as extra juice.
       const heat = (this.scoreMultiplier - 1) / (CHILI.maxMultiplier - 1);
       const tintAmt = Math.min(1, heat * 0.6 + this.chiliGlow * 0.4);
-      const headColor = tintAmt > 0 ? lerpColor(skin.snakeHead, CHILI.tintColor, tintAmt) : skin.snakeHead;
-      const bodyColor = tintAmt > 0 ? lerpColor(skin.snake, CHILI.tintColor, tintAmt * 0.8) : skin.snake;
+      const phaseColor = this.currentPhaseColor();
+      const headColor = tintAmt > 0 ? lerpColor(phaseColor.head, CHILI.tintColor, tintAmt) : phaseColor.head;
+      const bodyColor = tintAmt > 0 ? lerpColor(phaseColor.body, CHILI.tintColor, tintAmt * 0.8) : phaseColor.body;
       // Bigger Bite is purely a render-time effect: segments are drawn
       // scaled up around each cell's center. Grid coordinates / hitboxes
       // (this.snake) are never touched, so collision logic is unaffected.
@@ -1048,6 +1087,58 @@
       if (!this.started) {
         // idle screen: nothing extra to draw, DOM overlay covers it
       }
+    }
+
+    // Draws one food item (primary or twin) — identical treatment for
+    // both, keyed only off the item's own flags/position, never off
+    // whether it happens to be this.food or this.foodTwin.
+    renderFoodItem(g, skin, time, food) {
+      if (food.golden) {
+        const pulse = 0.55 + 0.45 * Math.sin(time / 120);
+        g.fillStyle(skin.golden, 0.65 + 0.35 * pulse);
+        const pad = 1 + pulse * 1.5;
+        g.fillRect(
+          food.x * CELL + pad, food.y * CELL + pad,
+          CELL - pad * 2, CELL - pad * 2
+        );
+      } else if (food.chili) {
+        const flicker = 0.5 + 0.5 * Math.sin(time / 90);
+        g.fillStyle(CHILI.tintColor, 0.85);
+        g.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+        g.fillStyle(skin.bg, 0.3 + 0.3 * flicker);
+        g.fillRect(food.x * CELL + 4, food.y * CELL + 4, CELL - 8, CELL - 8);
+      } else if (food.buff) {
+        // Fast pulse, diamond-ish inset — reads distinct from the
+        // square golden pulse and the flickering chili.
+        const pulse = 0.5 + 0.5 * Math.sin(time / 70);
+        g.fillStyle(BUFF.tintColor, 0.75 + 0.25 * pulse);
+        const pad = 1 + pulse * 2;
+        g.fillRect(
+          food.x * CELL + pad, food.y * CELL + pad,
+          CELL - pad * 2, CELL - pad * 2
+        );
+        g.fillStyle(skin.bg, 0.5);
+        g.fillRect(food.x * CELL + CELL / 2 - 1, food.y * CELL + 2, 2, CELL - 4);
+      } else if (food.frenzy) {
+        // Slow, wide pulse with a ring outline so it reads as "many
+        // points incoming" rather than another golden apple.
+        const pulse = 0.5 + 0.5 * Math.sin(time / 150);
+        g.fillStyle(FRENZY.tintColor, 0.5 + 0.3 * pulse);
+        g.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+        g.lineStyle(1, FRENZY.tintColor, 0.9);
+        g.strokeRect(food.x * CELL + 1, food.y * CELL + 1, CELL - 2, CELL - 2);
+      } else {
+        g.fillStyle(skin.food, 1);
+        g.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+      }
+    }
+
+    // Current score-phase base color for the snake (Feature 2) — recomputed
+    // live from this.score every render call, never cached, so a phase
+    // change takes effect on the exact tick the score crosses a threshold.
+    currentPhaseColor() {
+      const phase = phaseForScore(this.score);
+      return { head: phase.head, body: phase.body };
     }
 
     renderTrail(g, skin) {

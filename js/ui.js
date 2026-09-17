@@ -496,6 +496,14 @@
     $('btnScores').addEventListener('click', () => { renderScores(); openModal('scoresModal'); });
     $('btnSettings').addEventListener('click', () => { renderSettings(); openModal('settingsModal'); });
 
+    $('btnResetProgress').addEventListener('click', () => {
+      openModal('resetConfirmModal');
+    });
+    $('confirmResetBtn').addEventListener('click', () => {
+      economy.resetProgress();
+      window.location.reload();
+    });
+
     document.querySelectorAll('[data-close]').forEach((btn) => {
       btn.addEventListener('click', () => closeModal(btn.dataset.close));
     });

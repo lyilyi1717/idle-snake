@@ -13,6 +13,18 @@ Grounded in `js/economy.js` and `js/game.js` as they existed on 2026-09-16/17 (s
 `README.md`'s "Reward-loop design" section for the existing ethical-monetization
 baseline this document extends, never violates).
 
+**Implementation status (2026-09-17):** §1–§10 above are no longer just a spec —
+points-as-currency, the 26-node branching skill tree, ability cooldown-reduction
+(including the Phase Walls / Bigger Bite passive end-states and the Body Toss
+lives redesign), and the Rank ladders / High-Score Momentum system are all live in
+`js/economy.js` / `js/game.js` now (confirmed by grep: `CALIBRATION_K_COINS`,
+`CALIBRATION_K_POINTS`, `momentumFactor()`, `RANK_TIERS_COINS/SCORE`,
+`permeableScales`/`porousScales`, `state.economy.points` /
+`state.stats.lifetimeScore` are all present in the shipped code). §1–§10 remain
+below as the historical rationale/spec for that shipped system; new work goes in
+new dated sections appended after them, per this file's own standing instruction
+at the top.
+
 Last updated: 2026-09-17.
 
 ---
@@ -955,3 +967,137 @@ can make:
    ever gets wired to a real payment provider (per `economy.js`'s existing
    `mockPurchase()` stub/comment), do you want real prices to also change, or stay
    at these same two price points with just bigger coin grants?
+
+---
+
+## 11. External research — Chronoquartz (2026-09-17)
+
+Requested follow-up: research the game referred to as "Cronoquartz" for design
+ideas applicable to nokia-snake's economy/progression. The actual title is
+**Chronoquartz** (Steam app 3275880, also on Nintendo eShop; "Cronoquartz" appears
+to be a mishearing/misspelling of the real name — noting this up front since it's
+the kind of detail worth flagging rather than silently correcting without saying
+so). Researched via WebSearch + WebFetch against its Steam store page and
+aggregator listings (Thinky Games' own page 403'd for direct fetch; corroborated
+via playin.gg instead) — not played firsthand, so this is store-page/review-level
+depth, not a full playthrough analysis.
+
+### What Chronoquartz actually is
+
+A **narrative time-loop puzzle game**, not an idle/incremental game:
+
+- **Core loop:** a hard **10-turns-per-loop** budget. Every move is scarce and
+  deliberate — "every move counts," no combat, no reflexes/timing (per Metacritic/
+  Steam framing), pure puzzle-solving under a tight action budget.
+- **Progression across loops:** when a loop ends, the world resets, but the
+  *player's own knowledge* persists — memorized door codes, secret passages,
+  object locations, faster routes. This is the game's headline mechanic ("use the
+  knowledge gained from previous loops to progress further").
+- **Monetization:** a single flat purchase, **$9.99** (≈22.49 SR), on Steam and
+  Nintendo eShop. No IAP, no DLC, no subscription, no cosmetic store of any kind
+  found in any source checked. Reception is Overwhelmingly Positive (98% of 508
+  Steam user reviews).
+- **No numeric currency or spendable-resource system of any kind was found.** The
+  only "resource" is the 10-turn budget itself, which is a hard per-loop
+  constraint, not something earned, banked, or spent across loops.
+
+### Where the coordinator's framing didn't hold up
+
+The task asked me to extract ideas about "progression pacing, currency/resource
+design, prestige or reset mechanics, monetization approach" — worth saying
+plainly: **Chronoquartz has essentially no currency/resource-design or
+monetization *mechanics* to mine.** It's a premium, one-time-purchase puzzle game
+with zero economy. That's a real finding, not a research gap on my part — I
+checked the Steam page, an aggregator listing, and a review-index site
+specifically for exactly this and came up empty each time. The only two things
+genuinely worth carrying over are the loop-reset structure and the monetization
+*posture* (see below) — everything else in the brief's list (currency design,
+prestige-as-spendable-reset, IAP patterns) simply isn't present in this game to
+learn from.
+
+### Genuinely applicable ideas
+
+1. **External validation of the zero-dark-pattern monetization stance.** A
+   game with *no* IAP, *no* currency, *no* gacha, sold as a flat $9.99 one-time
+   purchase, hit 98% positive reviews. This doesn't hand nokia-snake a new
+   mechanic, but it's real-world evidence that the constraint already committed
+   to in `README.md` and reaffirmed throughout §1–§10 (coins/points never
+   purchasable as power, `mockPurchase()` deliberately stubbed) isn't a
+   commercial handicap — critically-loved games ship with zero monetization
+   tricks. Useful as citable support the next time this project's ethical stance
+   gets second-guessed, not as a design change.
+2. **The bounded-attempt-plus-permanent-carryover shape is validated, not
+   novel-to-import.** Chronoquartz's "loop resets, knowledge persists" structure
+   is functionally the same *shape* nokia-snake already has — a run resets
+   `this.score` to 0, but coins/points/tree/Rank persist permanently (§5–§9).
+   Chronoquartz just uses *qualitative* player knowledge as its permanent
+   carryover instead of a *numeric* currency. This is worth naming explicitly
+   because it confirms the existing per-run-reset-plus-permanent-economy
+   architecture is a sound, genre-crossing pattern (it works for a $9.99 premium
+   puzzle game and for idle/incremental games alike) — not a reason to change
+   anything, just a second, independent data point in favor of the shape already
+   chosen.
+3. **A concrete, optional next step: a fixed-budget "Loop Challenge" side-mode.**
+   The one piece of Chronoquartz's actual gameplay (not its economy) that could
+   transplant cleanly: a strictly bounded, fixed-seed attempt — e.g. a daily/
+   weekly seeded board with a hard move or time budget, scored purely on
+   efficiency, feeding a leaderboard. This would sit entirely outside the coin/
+   points economy (no entry cost, no purchasable advantage, no interaction with
+   the skill tree at all — a pure-skill leaderboard, which is trivially
+   consistent with every constraint in this document) and would give
+   nokia-snake a second, tension-flavored mode alongside the abundance-flavored
+   endless mode. Flagged as a **new-feature idea, not an economy change** — out
+   of this document's core scope, but concrete enough to hand to an
+   implementation pass if the user wants it.
+
+### Ideas considered and rejected
+
+1. **Knowledge-carry-over as a formal mechanic — rejected, doesn't map.**
+   Chronoquartz's carryover works because its dungeon layout is *fixed* across
+   loops (the same doors, same passages, same object locations every loop) — the
+   player is learning a static world. Nokia-snake's food/golden/chili/buff/frenzy
+   placement is freshly randomized every run by design (`spawnFood()`); there is
+   no fixed layout to learn. Importing "knowledge persistence" here would mean
+   either (a) faking it with a fixed board layout, which would gut the
+   randomized-pickup design this whole document builds on, or (b) it's already
+   what's happening informally as player skill (learning reaction timing, golden-
+   apple cadence, general strategy) — which isn't a system to design, just an
+   emergent property of any skill-based game. Not building this.
+2. **Scarcity-first tension (10-move budget) as a redesign of the core loop —
+   rejected, wrong genre fit.** Chronoquartz's whole feel comes from an
+   extremely scarce, high-stakes move budget where every action is deliberate.
+   Nokia-snake's own Frenzy redesign (§1) explicitly goes the opposite
+   direction — abundance, screen-filling bonus pips, a deliberate "juice burst."
+   Both are valid tension sources for their respective genres (slow cerebral
+   puzzler vs. fast-reflex arcade/idle hybrid); grafting scarcity-first pacing
+   onto nokia-snake's core loop would fight §1's own abundance design and the
+   game's arcade identity. Not recommended for the core loop — see idea #3 above
+   for where a scarcity-flavored mode could live instead, opt-in and
+   quarantined from the main loop.
+3. **Flat one-time-purchase-only monetization (dropping coin packs entirely) —
+   considered, not recommended as a wholesale replacement.** Chronoquartz's
+   $9.99-flat model works because it's a premium, non-idle, finite-content
+   puzzle game bought once. Nokia-snake is architected as a free-to-access,
+   session-based idle/arcade hybrid whose entire pacing model (§10) already
+   assumes an earn-first economy with a *bounded, ethical* convenience purchase
+   on top — not a genre or business-model swap. This isn't rejected on ethical
+   grounds (it's arguably the *more* ethical model) — it's rejected as
+   out-of-scope for this document, which is about tuning the existing
+   architecture, not proposing a different one. Worth surfacing to the user as a
+   business-model-level question, not resolving unilaterally here.
+
+### Concrete next steps
+
+1. No changes to the shipped §1–§10 economy are warranted by this research — the
+   two applicable findings (validation of the existing monetization stance, and
+   validation of the existing reset/carryover shape) confirm the current design,
+   they don't change any number or node.
+2. If the user wants to act on idea #3 (Loop Challenge mode), that's a genuinely
+   separate design task — a fixed-seed daily/weekly board, an efficiency-scoring
+   formula, and a leaderboard surface, all decoupled from `SKILL_TREE`/`economy`.
+   Worth its own follow-up brief if pursued; not scoped or designed further here.
+3. No further Chronoquartz-specific research is queued — the store-page-level
+   depth reached here (no economy system exists to dig deeper into) is
+   sufficient to answer the brief; a deeper dive (e.g. actually playing it) would
+   not surface additional currency/monetization mechanics, since the game
+   verifiably has none.

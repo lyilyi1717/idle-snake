@@ -349,6 +349,35 @@
     cursor: pointer;
   }
 
+  .modal .reset-divider {
+    border: none;
+    border-top: 1px solid #b7c19f;
+    margin: 14px 0 4px;
+  }
+
+  .modal .danger-btn {
+    display: block;
+    width: 100%;
+    margin: 8px 0 0;
+    border: none;
+    background: #b3261e;
+    color: #fff;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .modal .danger-btn:hover { background: #8f1f18; }
+
+  .modal .reset-warning {
+    font-size: 12px;
+    color: #4a5a32;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+  .modal .reset-warning strong { color: #8a1f18; }
+
   .modal .coin-balance {
     text-align: center;
     font-size: 13px;
@@ -615,7 +644,23 @@
       <span>Sound</span>
       <button class="action" id="toggleMuteSetting">ON</button>
     </div>
+    <hr class="reset-divider">
+    <button class="danger-btn" id="btnResetProgress">Reset Progress</button>
     <button class="close-btn" data-close="settingsModal">Close</button>
+  </div>
+</div>
+
+<!-- ---------- Reset confirmation modal ---------- -->
+<div class="modal-backdrop hidden" id="resetConfirmModal">
+  <div class="modal">
+    <h2>Reset Progress?</h2>
+    <p class="reset-warning">
+      This <strong>permanently deletes</strong> all saved progress — coins,
+      points, skill tree levels, achievements &amp; rank, high scores, and
+      unlocked skins/trails. Everything. This cannot be undone.
+    </p>
+    <button class="close-btn" data-close="resetConfirmModal">Cancel</button>
+    <button class="danger-btn" id="confirmResetBtn">Yes, Delete Everything</button>
   </div>
 </div>
 
