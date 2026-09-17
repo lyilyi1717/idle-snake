@@ -420,7 +420,7 @@
   function renderScores() {
     const list = economy.getState().highScores;
     if (!list.length) {
-      $('scoresList').innerHTML = '<p style="font-size:11px;color:#4a5a32;">No scores yet — go play!</p>';
+      $('scoresList').innerHTML = '<p style="font-size:12px;color:#4a5a32;">No scores yet — go play!</p>';
       return;
     }
     $('scoresList').innerHTML = list.map((entry, i) => {

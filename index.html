@@ -83,42 +83,57 @@
     display: block;
   }
 
+  /* ---------- Side panel: 8-bit / pixel-console chrome ----------
+     Deliberately NOT the game screen's grey brushed-plastic language:
+     hard edges (zero border-radius), zero-blur solid-offset shadows,
+     and a small saturated NES-style palette on a near-black ground.
+     "Pressed button" bevel is done with sharp 2px inset border-color
+     edges (light top-left / dark bottom-right, swapped on press)
+     instead of soft blurred box-shadow. Scoped to .side-panel only —
+     .btn/.btn-wide are only ever used inside it (verified against
+     index.html — no standalone .btn elsewhere), so it's safe to
+     redefine them here rather than leaving unused legacy rules. */
   .btn {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: none;
-    background: radial-gradient(circle at 35% 35%, #f0f0f0, #aaa);
+    border: 2px solid #000;
+    border-radius: 0;
+    background: #2456c2;
     box-shadow:
-      0 3px 6px rgba(0,0,0,.3),
-      inset 0 1px 2px rgba(255,255,255,.7);
+      inset 2px 2px 0 0 #6fa8ff,
+      inset -2px -2px 0 0 #0a2154;
     cursor: pointer;
-    font-size: 20px;
-    color: #555;
-    transition: transform .05s;
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    font-family: 'Courier New', monospace;
   }
 
-  .btn:active {
-    transform: scale(.92);
+  .btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
     box-shadow:
-      0 1px 3px rgba(0,0,0,.3),
-      inset 0 1px 2px rgba(255,255,255,.5);
+      inset -2px -2px 0 0 #6fa8ff,
+      inset 2px 2px 0 0 #0a2154;
   }
 
-  /* ---------- Side panel: stats + menu (matching plastic chrome) ---------- */
+  .btn:disabled {
+    cursor: default;
+    background: #3a3d5c;
+    color: #c7c9dc;
+    box-shadow:
+      inset 2px 2px 0 0 #52546e,
+      inset -2px -2px 0 0 #202234;
+  }
+
   .side-panel {
     flex: 0 0 250px;
     max-width: 300px;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg, #e8e8e8 0%, #c4c4c4 100%);
-    border-radius: 28px;
-    padding: 22px 18px;
-    box-shadow:
-      0 0 0 4px #555,
-      0 20px 60px rgba(0,0,0,.6),
-      inset 0 2px 4px rgba(255,255,255,.6);
-    gap: 22px;
+    background: #0d0d1a;
+    border: 3px solid #000;
+    border-radius: 0;
+    padding: 18px 14px;
+    box-shadow: 6px 6px 0 0 #000;
+    gap: 18px;
     overflow-y: auto;
   }
 
@@ -130,14 +145,25 @@
 
   .status-bar span {
     display: block;
-    background: rgba(0,0,0,.08);
-    border-radius: 10px;
+    background: #1a1c33;
+    border: 2px solid #000;
+    border-left-width: 5px;
+    border-radius: 0;
     padding: 10px 12px;
     font-size: 16px;
     font-weight: 700;
-    color: #333;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+    color: #f5f5ff;
+    box-shadow:
+      inset 2px 2px 0 0 rgba(255,255,255,.06),
+      inset -2px -2px 0 0 rgba(0,0,0,.5);
   }
+
+  /* Per-stat accent colors — decorative left-edge only, not a text pair. */
+  #scoreLabel { border-left-color: #ffd23f; }
+  #coinsLabel { border-left-color: #ffb703; }
+  #pointsLabel { border-left-color: #38bdf8; }
+  #speedLabel { border-left-color: #ff5470; }
+  #idleRateLabel { border-left-color: #4ade80; }
 
   .menu-row {
     display: flex;
@@ -148,12 +174,24 @@
   .btn-wide {
     width: 100%;
     height: auto;
-    border-radius: 14px;
-    padding: 14px 10px;
-    font-size: 13px;
+    padding: 12px 10px;
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
   }
+
+  /* Always-on ability indicator (Permeable Scales / Perpetual Molt) —
+     distinct purple accent so it visually reads as a different state
+     from a live/cooldown ability button, not just "disabled". */
+  .btn-wide.passive {
+    cursor: default;
+    background: #6b4fa0;
+    color: #f0e9ff;
+    box-shadow:
+      inset 2px 2px 0 0 #9b7fd1,
+      inset -2px -2px 0 0 #3c2a63;
+  }
+  .btn-wide.passive:active { transform: none; }
 
   .overlay {
     position: absolute;
@@ -169,15 +207,16 @@
   }
 
   .overlay.hidden { display: none; }
-  .overlay h1 { font-size: 20px; margin-bottom: 8px; color: #1f2b18; letter-spacing: 2px; }
-  .overlay p { font-size: 11px; color: #2b3a22; margin-bottom: 4px; }
+  .overlay h1 { font-size: 21px; margin-bottom: 8px; color: #1f2b18; letter-spacing: 2px; }
+  .overlay p { font-size: 12px; color: #2b3a22; margin-bottom: 4px; }
   .overlay .score-final {
-    font-size: 30px;
+    font-size: 31px;
     font-weight: 700;
     color: #1f2b18;
     margin: 8px 0;
   }
-  .overlay .sub-line { font-size: 10px; color: #3a4a2a; margin-top: 2px; }
+  /* was #3a4a2a (3.87:1 on #9bab77, fails 4.5:1) — darkened for contrast */
+  .overlay .sub-line { font-size: 11px; color: #223018; margin-top: 2px; }
   .blink { animation: blink 1s infinite; }
   @keyframes blink {
     0%, 100% { opacity: 1; }
@@ -191,7 +230,7 @@
     transform: translateX(-50%);
     background: rgba(31,43,24,.85);
     color: #f4f9e8;
-    font-size: 10px;
+    font-size: 11px;
     padding: 4px 10px;
     border-radius: 10px;
     z-index: 30;
@@ -227,7 +266,7 @@
   }
 
   .modal h2 {
-    font-size: 14px;
+    font-size: 16px;
     letter-spacing: 2px;
     color: #2b3a22;
     margin-bottom: 10px;
@@ -242,12 +281,12 @@
     border-radius: 8px;
     padding: 8px 10px;
     margin-bottom: 6px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .modal .row .meta { color: #4a5a32; flex: 1; padding-right: 8px; }
   .modal .row .meta .name { font-weight: 700; color: #1f2b18; display: block; }
-  .modal .row .meta .desc { font-size: 9px; }
+  .modal .row .meta .desc { font-size: 10px; }
 
   .rank-panel {
     background: #d4dcc4;
@@ -257,7 +296,7 @@
   }
   .rank-line { margin-bottom: 6px; }
   .rank-line:last-child { margin-bottom: 0; }
-  .rank-label { font-size: 9px; color: #1f2b18; margin-bottom: 4px; }
+  .rank-label { font-size: 10px; color: #1f2b18; margin-bottom: 4px; }
   .rank-bar-outer {
     height: 6px;
     border-radius: 3px;
@@ -274,7 +313,7 @@
     border: none;
     border-radius: 8px;
     padding: 6px 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     background: #4a5a32;
@@ -282,28 +321,37 @@
     white-space: nowrap;
   }
   .modal button.action:disabled {
+    /* was color inherited (#f4f9e8) on #9aa78e = 2.36:1, fails 4.5:1 —
+       switched disabled label to dark text on the same muted bg */
     background: #9aa78e;
+    color: #1f2b18;
     cursor: default;
   }
   .modal button.action.selected {
+    /* .selected is also `disabled` in the DOM (Equipped/Owned state), so it
+       needs its own color here — otherwise it inherits the dark text added
+       above for the unaffordable-disabled state and becomes invisible on
+       this near-black background. */
     background: #1f2b18;
+    color: #f4f9e8;
   }
 
   .modal .close-btn {
     display: block;
     margin: 12px auto 0;
     border: none;
-    background: #888;
+    /* was #888 (3.54:1 with white text, fails 4.5:1) — darkened */
+    background: #5c5c5c;
     color: #fff;
     border-radius: 8px;
     padding: 8px 16px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
 
   .modal .coin-balance {
     text-align: center;
-    font-size: 12px;
+    font-size: 13px;
     color: #4a5a32;
     margin-bottom: 10px;
     font-weight: 700;
@@ -344,7 +392,7 @@
   }
 
   .skill-branch h3 {
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: #2b3a22;
@@ -361,51 +409,57 @@
     gap: 4px;
   }
   .skill-node .name {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: #1f2b18;
   }
   .skill-node .desc {
-    font-size: 8px;
+    font-size: 9px;
     color: #4a5a32;
     line-height: 1.3;
   }
   .skill-node .currency-tag {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .5px;
     text-transform: uppercase;
   }
-  .skill-node .currency-tag.coins { color: #7a5a12; }
+  /* was #7a5a12 (4.50:1 on #d4dcc4, fails 4.5:1 threshold) — darkened */
+  .skill-node .currency-tag.coins { color: #63490d; }
   .skill-node .currency-tag.points { color: #1f5a7a; }
   .skill-node .requires {
-    font-size: 8px;
+    font-size: 9px;
     font-style: italic;
     color: #8a3a2b;
   }
   .skill-node button.action {
     width: 100%;
     margin-top: 2px;
-    font-size: 9px;
+    font-size: 10px;
     padding: 6px 4px;
   }
 
-  .skill-node.locked { opacity: .5; }
+  /* was `opacity: .5` on the whole node, which blended both bg and text
+     down to ~2-2.7:1 against the modal background (fails 4.5:1). Replaced
+     with explicit muted colors that keep the "locked" look but pass
+     contrast on their own. */
+  .skill-node.locked { background: #c3c8b8; }
+  .skill-node.locked .name { color: #363c2c; }
+  .skill-node.locked .desc { color: #3f4632; }
+  .skill-node.locked .currency-tag.coins { color: #5f450d; }
+  .skill-node.locked .currency-tag.points { color: #17465f; }
+  .skill-node.locked .requires { color: #7a3225; }
   .skill-node.maxed { background: #b9c7a0; }
+  /* was #4a5a32 on #b9c7a0 = 4.19:1, fails 4.5:1 — darkened for the maxed bg */
+  .skill-node.maxed .desc { color: #354322; }
   .skill-node.affordable { box-shadow: inset 0 0 0 2px #4a5a32; }
-
-  /* Static "always-on" indicator shown in place of an ability button once
-     its passive capstone (Permeable Scales / Perpetual Molt) is owned —
-     non-interactive, dimmed relative to a live button. */
-  .btn-wide.passive { opacity: .7; cursor: default; }
-  .btn-wide.passive:active { transform: none; }
 
   .modal .setting-toggle {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 2px;
-    font-size: 11px;
+    font-size: 12px;
     color: #2b3a22;
   }
 
@@ -417,12 +471,12 @@
     color: #2b3a22;
     margin: 10px 0;
   }
-  .idle-modal p { font-size: 11px; color: #4a5a32; text-align: center; margin-bottom: 4px; }
+  .idle-modal p { font-size: 12px; color: #4a5a32; text-align: center; margin-bottom: 4px; }
 
   footer {
     flex: 0 0 auto;
     color: #888;
-    font-size: 10px;
+    font-size: 11px;
     margin-top: 8px;
     text-align: center;
   }
@@ -451,8 +505,8 @@
       flex-wrap: wrap;
       gap: 12px;
       overflow-y: visible;
-      border-radius: 18px;
-      padding: 16px 14px;
+      padding: 14px 12px;
+      box-shadow: 4px 4px 0 0 #000;
     }
 
     .status-bar {
@@ -464,7 +518,7 @@
 
     .status-bar span {
       flex: 1 1 auto;
-      font-size: 12px;
+      font-size: 13px;
       padding: 8px 10px;
       text-align: center;
     }
@@ -480,7 +534,7 @@
       flex: 1 1 calc(33.333% - 6px);
       width: auto;
       padding: 10px 6px;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .modal.modal-skills {
