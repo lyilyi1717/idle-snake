@@ -552,13 +552,13 @@
       const frenzy = !golden && !chili && !buff && rollFrenzy();
       this.food = { x, y, golden, chili, buff, frenzy };
 
-      // Golden/chili/buff spawns also get an identical "twin" copy at a
-      // second empty cell — a genuine spatial choice between two
-      // indistinguishable pickups. Plain apples and frenzy triggers never
-      // get a twin (frenzy already puts many pips on the board by design).
+      // Golden/chili/buff spawns also get a plain-apple "twin" at a second
+      // empty cell — a real choice between the special reward and a safe
+      // guaranteed normal apple. Plain apples and frenzy triggers never get
+      // a twin (frenzy already puts many pips on the board by design).
       if (golden || chili || buff) {
         const twinPos = this.pickSecondEmptyCell(x, y);
-        this.foodTwin = { x: twinPos.x, y: twinPos.y, golden, chili, buff, frenzy: false };
+        this.foodTwin = { x: twinPos.x, y: twinPos.y, golden: false, chili: false, buff: false, frenzy: false };
       } else {
         this.foodTwin = null;
       }
@@ -717,13 +717,14 @@
       this.snake.unshift({ x: nx, y: ny });
 
       if (willEat) {
-        // Whichever copy (primary or twin) the head landed on this tick is
-        // "the one eaten" — apply the effect from its flags (identical to
-        // the primary's when a twin exists). Clear the twin immediately so
-        // it can never linger to be collected for a second reward on a
-        // later tick; spawnFood() below fully replaces both this.food and
-        // this.foodTwin anyway, but this makes the invariant explicit and
-        // holds even if that call is ever reordered.
+        // Whichever copy (special primary or plain-apple twin) the head
+        // landed on this tick is "the one eaten" — apply the effect from
+        // its own flags, so choosing the twin over the primary means a
+        // normal-apple reward instead of the special one. Clear the twin
+        // immediately so it can never linger to be collected for a second
+        // reward on a later tick; spawnFood() below fully replaces both
+        // this.food and this.foodTwin anyway, but this makes the invariant
+        // explicit and holds even if that call is ever reordered.
         const eaten = eatingTwin ? this.foodTwin : this.food;
         this.foodTwin = null;
         this.applesEaten += 1;
@@ -1042,9 +1043,9 @@
       // Trail cosmetic effect (behind the snake).
       this.renderTrail(g, skin);
 
-      // Food — primary and (when present) its identical twin get the exact
-      // same visual treatment via renderFoodItem(), so the two are
-      // indistinguishable to the player.
+      // Food — the primary special pickup and (when present) its plain-
+      // apple twin both render via the same renderFoodItem() helper, which
+      // picks the right visual per food object's own flags.
       if (this.food) this.renderFoodItem(g, skin, time, this.food);
       if (this.foodTwin) this.renderFoodItem(g, skin, time, this.foodTwin);
 
