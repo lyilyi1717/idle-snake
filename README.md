@@ -1,194 +1,106 @@
-# Nokia 3310 — Snake
+# Idle Snake (Nokia 3310 style)
 
-A single-page, zero-build Snake game built on [Phaser 3](https://phaser.io) (loaded
-from a CDN, `phaser@3.90.0`, the latest 3.x release as of this build), styled as a
-Nokia 3310 handset with a monochrome-ish olive/green LCD.
+An idle clicker built on Snake. The snake steers itself and never dies.
+Every run ends in a **Molt**, which banks a permanent Skin multiplier.
+You tap for speed, snatch mice and fading apples, place portals, buy
+upgrades, and earn smarter brains in Trials.
+
+Design source: `IDLE_PIVOT_TASKS.md` (locked decisions) and
+`docs/game-theory-design.md` §4 (multiplier structure).
+`docs/idle-implementation-notes.md` records where this build departs from
+the spec, and why.
 
 ## Running it
 
-There's no build step and nothing to install. Two options:
+```
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest suite for the simulation core
+npm run build      # typecheck + dist/index.html (single file, opens from disk)
+```
 
-1. **Static server (recommended):** from this folder run e.g.
-   `python -m http.server 8080` and open `http://localhost:8080/`.
-2. **Open directly:** double-click `index.html`. This works in most browsers;
-   some browser extensions/sandboxes (and some strict `file://` security
-   policies) block local scripts from a `file://` URL, in which case use
-   option 1.
+`dist/index.html` inlines all JS and CSS, so you can double-click it
+without a server.
 
-## Files
+## How a run works
 
-- `index.html` — Nokia phone chrome (CSS), the LCD screen (a Phaser mount
-  point), on-screen D-pad, and the shop/badges/scores/settings/idle-claim
-  modals (plain DOM, not Phaser).
-- `js/storage.js` — tiny `localStorage` JSON read/write helper.
-- `js/audio.js` — Web Audio API square-wave beep engine (no audio files).
-- `js/economy.js` — the entire monetization/reward-loop layer: coins,
-  skins, trails, upgrades, achievements, golden-apple odds, idle rewards,
-  and the mock purchase stub. This is the file to read to understand the
-  economy end to end.
-- `js/game.js` — the Phaser 3 `Scene`: grid movement, collision, speed
-  curve, input (keyboard + swipe), rendering, CRT overlay.
-- `js/ui.js` — wires DOM buttons/modals to `game.js` and `economy.js` via
-  a small `EventTarget` bus (`NS.bus`), so the three layers stay decoupled.
+- **Autopilot.** A brain picks every move:
+  1. Greedy: heads straight for the apple.
+  2. Pathfinder: shortest path (BFS) and uses portals.
+  3. Survivor: BFS, plus a check that the tail stays reachable. Auto-Prunes when boxed in early.
+  4. Hamiltonian: follows a nested Hamiltonian cycle with safe shortcuts.
+     It never traps, but it ignores portals and only runs in the Open zone.
+- **The tide.** The arena loses one outer ring at a time, and a full board
+  closes in about 240 s. Any body left outside the new ring is cut off.
+  If the head is outside, the snake Molts.
+- **Molt.** A Molt comes from hitting a wall or yourself, the tide, the
+  arena closing, a full board, or pressing *Molt Now*. It pays
+  `ΔSkin = 0.01·√L·J`, where `J` depends on fill φ = L / free arena cells:
+  ×1.5 at φ ≥ 0.75, and ×3 at φ ≥ 0.95. The ×3 needs the Hamiltonian brain.
+- **Combo.** Eat within 25 ticks of the last apple to build combo, worth up
+  to ×3. The first portal trip per apple adds 10 ticks to the window.
+- **Score multiplier** is additive within each category and multiplicative
+  across them:
+  `chili × buff × (1 + skill tree) × combo × Skin × zone`.
+  Every point also adds 0.2 coins.
 
 ## Controls
 
-Arrow keys or WASD to steer; swipe on touch/mobile. Enter, Space, or a tap
-on the screen starts/restarts. `M` / the Mute button toggles sound.
+| Input | Effect |
+|---|---|
+| Tap/click an empty cell, or Space | Speed burst: +10% for 1 s, up to 5 stacks (+30% during a Rush) |
+| Tap a mouse (within 1 cell) | Catch it for 50 × multiplier |
+| Tap a fading apple | Freeze its timer for +5 s (once per apple) |
+| Tap an active spike (Tunnels) | Jam it for 3 s (10 s cooldown) |
+| Drag a portal end | Move it. Costs 1 move: 2 per run, +1 every 30 s, max 3. Free for a pair bought this run. |
 
-## Reward-loop design
+## Progression
 
-This section documents the *why* behind the monetization layer in
-`js/economy.js`, and how it satisfies the "ethical, cosmetic-only" brief.
+- **Shop:** portal pairs (400 / 1,500 / 6,000 coins; pair 3 needs Tunnels),
+  skins, trails, the Offline Snack Stash, and mock coin packs.
+- **Skills:**
+  - Engine: Quick Scales (+speed), Slow Tide (slower creep), Combo Lure,
+    Spare Shears (Prune charges).
+  - Score Mastery and Economy: carried over from the pre-idle tree.
+- **Brains & Zones:**
+  - Brain Trials (500 / 3,000 / 15,000 coins). A fixed 16×12 board where
+    only the new brain survives. Retries are free for 10 minutes.
+  - Zones: Open, Box, Cross, Tunnels, Spiral (×1, ×1.5, ×2, ×2.5, ×3). A
+    Molt at φ ≥ 0.75 in your top zone unlocks the next one.
+  - Daily Race: same seed for everyone on a UTC date, fixed loadout, no coins.
+- **Events:** a 30 s Rush every 8–12 minutes. Mice appear every 45–90 s.
+  15% of apples fade out after 8 s and are worth ×3.
+- **Offline:** earns 0.4 × last session's measured coins/s, capped at 12 h.
 
-### Golden apples — bounded variable-ratio reinforcement
+## Code layout
 
-Every food spawn calls `economy.rollGolden()`. Two things make this a
-*bounded* variable-ratio schedule rather than an open-ended gamble:
+```
+src/core/     pure, deterministic simulation (no DOM, no wall clock)
+  sim.ts        run state + advance(dt): ticks, creep, pickups, portals, Molt
+  brains.ts     tier 1–4 autopilots
+  hamilton.ts   nested Hamiltonian cycles that survive ring shrinks
+  pathfind.ts   BFS with portal edges, flood fill
+  economy.ts    catalogs + Meta (all profile mutations)
+  profile.ts    save schema, v1 → v2 migration, storage adapter
+  runs.ts       normal / trial / daily run configs
+  zones.ts      zone wall, spike and mud generators
+  rng.ts        mulberry32 + string hash, independent streams
+src/render/   Canvas 2D renderer
+src/ui/       DOM side panel + modals
+src/game.ts   controller: loop, input, saving, offline earnings
+tests/        Vitest (tune-trials / probe are opt-in balance tools)
+```
 
-- **The odds are randomized within a hard range, not fixed.** Each time the
-  cooldown clears, the chance for that spawn is redrawn uniformly between
-  `GOLDEN.minChance` (7%) and `GOLDEN.maxChance` (16%) — so the player can
-  feel the "maybe this one" tension of a variable-ratio schedule, but can
-  never memorize an exact interval and never faces an unbounded/rigged
-  probability.
-- **A hard cooldown caps the drop rate.** `GOLDEN.minCooldownSpawns`/
-  `maxCooldownSpawns` (4–8 normal spawns) guarantees goldens can never
-  cluster back-to-back, capping how often the reward can fire regardless of
-  luck.
+Saves live in `localStorage` under `nokiaSnake.idle.v2`, with a
+`.backup` copy. A pre-idle `nokiaSnake.state.v1` save is migrated on first
+load. Currencies, cosmetics, badges and kept skill nodes carry over, and
+levels in removed nodes (abilities, vitality) are refunded.
 
-When a golden apple is eaten, the coin bonus is `economy.goldenReward()` —
-a `randInt(5, 20)`, i.e. also bounded min/max, never unbounded. The golden
-apple's score value is only modestly higher than a normal apple (15 vs 10
-score); the *real* reward is coins, which can only ever buy cosmetics (see
-below), so a lucky golden-apple streak never distorts the leaderboard's
-skill signal.
+## Monetization stance
 
-### Soft currency — "Snake Coins," earn-only, cosmetics-only
-
-Coins come from four sources, all gated behind actual play:
-
-1. Golden apples (bounded, see above).
-2. A flat end-of-run bonus, `floor(score / 25)`, so ordinary skillful play
-   is always worth something even on an unlucky (no-golden) run.
-3. Achievement unlocks (one-time, see below).
-4. The idle/AFK claim (see below).
-
-Coins can **only** buy: skins (`economy.SKINS`), trail/particle cosmetic
-effects (`economy.TRAILS`), and one idle-multiplier convenience upgrade
-(`economy.UPGRADES.idleMultiplier`, +50% idle coin rate). None of these
-touch snake speed, collision rules, lives, or the score formula — nothing
-purchasable makes the game easier or the leaderboard less legitimate.
-Coins are never purchasable with real money in this build (see the mock
-purchase section below).
-
-### Idle/AFK trickle — a calm retention hook, not a countdown
-
-`economy.computeIdleReward()` reads a `lastSeen` timestamp written to
-`localStorage` and, on return, offers a **single, calm, claimable lump
-sum** based on real elapsed wall-clock time (`IDLE.coinsPerSecond`,
-~1 coin/45s, times the idle-multiplier upgrade if owned). Design choices
-that keep this from becoming manipulative:
-
-- **No countdown, no timer, no urgency.** The reward is shown once, on
-  return, as a flat "+N coins" — there's nothing to watch tick down and
-  nothing that decays if you don't claim it immediately.
-- **Capped, not punishing.** `IDLE.capSeconds` (12 hours) caps how much a
-  very long absence can earn — the cap protects the economy from runaway
-  numbers, but there's no *penalty* for being away longer than that; you
-  simply stop accruing past the cap instead of losing anything.
-- **A minimum threshold** (`IDLE.minSecondsToShowClaim`, 30s) means a
-  simple tab refresh doesn't spam a "reward" modal for a few seconds away.
-- The "last seen" timestamp is refreshed periodically during active play
-  (`ui.js`, every 60s, plus on tab-hide/unload) so idle credit reflects
-  genuine time away from the game, not time spent actively playing.
-
-### Collection / completionism — everything earnable, nothing paywalled
-
-`economy.ACHIEVEMENTS` is a fixed checklist (first bite, score milestones,
-golden-apple hunting, a long snake, games played, lifetime coins earned).
-Each unlocks once and pays a coin reward. Skins and trails can be earned
-either by playing toward achievement coin payouts and then buying them in
-the shop, or (for anyone who prefers) by any coins earned via golden
-apples/run bonuses — there is no skin, trail, or upgrade that is only
-reachable through a real-money purchase. Nothing is artificially
-paywalled; everything is reachable through ordinary play in a reasonable
-number of sessions.
-
-### Dark patterns explicitly avoided
-
-- No loot boxes and no real-money gambling odds of any kind.
-- No FOMO countdown timers anywhere (shop, idle claim, or otherwise).
-- No pay-to-skip-frustration mechanic (nothing purchasable reduces
-  difficulty or removes friction from the core game).
-- No purchasable power: speed, collision rules, and scoring are identical
-  for every player regardless of spend.
-
-## Where real payment (Stripe) would be wired
-
-The **only** place in the codebase that represents a real-money
-transaction is `economy.mockPurchase(itemId)` in `js/economy.js`, backing
-the two "Coin Pack" rows in the in-game Shop. Read the comment directly
-above that function for the full integration sketch; in short, a real
-build would replace the body of `mockPurchase()` with:
-
-1. **Client** calls a backend endpoint to create a Stripe Checkout
-   Session / PaymentIntent for the chosen `itemId`
-   (`POST /api/checkout { itemId }`).
-2. **Redirect** the browser to the Stripe-hosted checkout URL returned by
-   that endpoint (or confirm the PaymentIntent client-side with
-   Stripe.js/Elements, if using an embedded flow).
-3. **Stripe** redirects back to the app and/or fires a
-   `checkout.session.completed` webhook to the backend.
-4. **Backend** verifies the webhook signature and *only then* grants the
-   item server-side against the player's account — entitlements should
-   never be granted from a client-side "success" callback alone, since
-   that can be spoofed.
-5. **Client** refetches/polls its entitlements and updates local state to
-   match the server.
-
-None of that network/payment code exists in this build — `mockPurchase()`
-just grants the item locally and instantly, so as shipped the in-game
-economy is 100% play-to-earn with no real charges possible.
-
-## Testing performed
-
-- `node --check` was run against every file in `js/` — all pass (syntax
-  only; Phaser globals aren't evaluated by `--check`).
-- Cross-referenced every DOM `id` used by `js/ui.js` against `index.html`
-  (all `$('...')` lookups, every `openModal`/`closeModal` target, and
-  every `data-close` attribute) with a small Node script — no missing
-  IDs.
-- Loaded the page in a real Chrome tab (via a local static server, since
-  the browser extension used for testing blocks `file://` navigation) and
-  confirmed: Phaser 3.90.0 initializes with **zero console errors**, the
-  Nokia chrome/LCD/D-pad/status bar render correctly, and the start
-  overlay displays.
-- Drove full games through the real, shipped game-loop functions
-  (`step()`, `die()`, `spawnFood()`, `recordRunEnd()`,
-  `checkAchievements()` — the exact same functions the live render loop
-  calls) because the automated browser tab was backgrounded by the OS
-  (`document.hidden`), which is throttled/paused by both Phaser's own
-  visibility handling and the browser's `requestAnimationFrame` policy —
-  a limitation of the headless automation environment, not the game.
-  This confirmed, against the real code paths and with assertions on the
-  results: eating grows the snake and adds score; golden-apple reward
-  amounts always land in the declared `[5, 20]` coin range; wall-collision
-  mode kills the snake exactly at the grid boundary; wrap-around mode
-  carries the snake to the opposite edge and keeps it alive; dying
-  correctly records a high score, computes the `floor(score/25)` bonus,
-  unlocks the right achievements with the right coin payouts, and updates
-  the DOM game-over overlay text; buying an already-owned skin is
-  correctly rejected; `mockPurchase()` grants exactly the stated coin
-  amount and nothing else. No console errors were logged during any of
-  this.
-- Manually traced `js/game.js`'s input handlers (`keydown` key map,
-  pointer-based swipe detection, the opposite-direction guard) and the
-  fixed-timestep accumulator loop in `update()` line by line to confirm
-  correctness independent of the above.
-
-## What was intentionally left out
-
-No build system, no `package.json`, no bundler, and no dependency beyond
-the single Phaser CDN `<script>` tag, per the brief. No git repo was
-created in this folder.
+Coins are earned only through play. The two Coin Pack rows call
+`Meta.mockPurchase()` (`src/core/economy.ts`), which grants coins locally
+and charges nothing. That is the single place a real payment provider
+would be wired. Entitlements would have to be granted server-side from a
+verified webhook, never from a client callback. There are no loot boxes
+and no FOMO timers.
