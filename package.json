@@ -11,10 +11,16 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/howler": "^2.2.13",
     "@types/node": "^22.20.4",
     "typescript": "~5.9",
     "vite": "^8.3.0",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "howler": "^2.2.4",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.21.0"
   }
 }

@@ -9,7 +9,8 @@ import type { Pt } from './core/grid';
 import { type KV, SAVE_KEY, LEGACY_KEY, browserKV, loadProfile, saveProfile } from './core/profile';
 import { dailyRun, dateKey, normalRun, trialRun, zoneName } from './core/runs';
 import { Sim, type SimEvent } from './core/sim';
-import { type DragView, type Floater, Renderer } from './render/renderer';
+import { type BoardRenderer, type DragView, type Floater } from './render/common';
+import { createRenderer } from './render/create';
 import type { UI } from './ui/ui';
 
 const TARGET_COLS = 48;
@@ -30,7 +31,7 @@ export class Game {
   sim!: Sim;
   run: RunKind = { kind: 'normal' };
   ui!: UI;
-  readonly renderer: Renderer;
+  renderer!: BoardRenderer;
   private canvas: HTMLCanvasElement;
   private lastFrame = 0;
   private lastSave = 0;
@@ -45,13 +46,16 @@ export class Game {
 
   constructor() {
     this.canvas = document.getElementById('board') as HTMLCanvasElement;
-    this.renderer = new Renderer(this.canvas);
     this.meta = new Meta(loadProfile(this.kv, legacyNodeCost));
     audio.setMuted(this.meta.p.settings.muted);
+    audio.setMusic(this.meta.p.settings.music);
   }
 
-  start(ui: UI) {
+  async start(ui: UI) {
     this.ui = ui;
+    const r = await createRenderer(this.canvas, document.querySelector('.lcd') as HTMLElement);
+    this.renderer = r.renderer;
+    this.canvas = r.canvas;
     this.newRun({ kind: 'normal' });
     this.bindInput();
     document.addEventListener('visibilitychange', () => {
@@ -180,6 +184,7 @@ export class Game {
 
   private onEvent(e: SimEvent) {
     const p = this.meta.p;
+    this.renderer.fx?.(e, this.sim);
     switch (e.t) {
       case 'eat':
         if (e.kind === 'golden') audio.golden();
@@ -215,6 +220,7 @@ export class Game {
         this.float(e.x, e.y, 'JAM', 0x33d6e0);
         break;
       case 'rush':
+        audio.setRush(e.on);
         if (e.on) {
           audio.rush();
           this.ui.toast('RUSH! Taps hit harder and mice swarm for 30 s', 2500);

@@ -727,3 +727,7 @@ body {
 
 .screen-hint { transition: opacity 1s; }
 .screen-hint.faded { opacity: 0; }
+
+/* PixiJS draws its own CRT scanlines and vignette (CRTFilter). */
+.lcd.gpu::before,
+.lcd.gpu::after { display: none; }

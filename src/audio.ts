@@ -1,8 +1,20 @@
-// Web Audio square-wave beeps, Nokia-3310 in spirit. No audio files. The
-// AudioContext is created lazily on the first user gesture (autoplay policy).
+// Audio: a Howler sprite of synthesised chiptune SFX (scripts/make-audio.mjs)
+// plus an optional music loop. Until the sprite has decoded, or if it fails,
+// every sound falls back to a Web Audio square-wave beep, as before.
+
+import { Howl, Howler } from 'howler';
+import musicUrl from './assets/music.wav?inline';
+import sprite from './assets/sfx.json';
+import sfxUrl from './assets/sfx.wav?inline';
+
+type SfxName = keyof typeof sprite;
 
 let ctx: AudioContext | null = null;
 let muted = false;
+let sfx: Howl | null = null;
+let sfxReady = false;
+let music: Howl | null = null;
+let musicOn = false;
 
 function ensureCtx(): AudioContext | null {
   try {
@@ -35,77 +47,112 @@ function beep(freq: number, durMs: number, vol = 0.15, delayMs = 0) {
   osc.stop(stopAt + 0.02);
 }
 
+function loadSprite() {
+  if (sfx) return;
+  sfx = new Howl({
+    src: [sfxUrl],
+    format: ['wav'],
+    sprite: sprite as unknown as Record<string, [number, number]>,
+    volume: 0.7,
+    onload: () => {
+      sfxReady = true;
+    },
+    onloaderror: (_id, err) => console.warn('[audio] sprite failed, using beeps', err),
+  });
+}
+
+function play(name: SfxName, fallback: () => void) {
+  if (muted) return;
+  if (sfx && sfxReady) sfx.play(name);
+  else fallback();
+}
+
+function syncMusic() {
+  if (musicOn && !muted) {
+    if (!music) music = new Howl({ src: [musicUrl], format: ['wav'], loop: true, volume: 0.35 });
+    if (!music.playing()) music.play();
+  } else if (music?.playing()) {
+    music.pause();
+  }
+}
+
 export const audio = {
   setMuted(v: boolean) {
     muted = v;
+    Howler.mute(v);
+    syncMusic();
   },
   isMuted: () => muted,
+  setMusic(v: boolean) {
+    musicOn = v;
+    syncMusic();
+  },
+  /** Rush speeds the music up. */
+  setRush(on: boolean) {
+    music?.rate(on ? 1.25 : 1);
+  },
+  /** Call from a user gesture: satisfies autoplay policy and starts decoding. */
   unlock() {
     ensureCtx();
+    loadSprite();
+    syncMusic();
   },
-  eat: () => beep(880, 55, 0.14),
-  golden() {
+  eat: () => play('eat', () => beep(880, 55, 0.14)),
+  golden: () => play('golden', () => {
     beep(660, 60, 0.16);
     beep(990, 70, 0.16, 60);
     beep(1320, 90, 0.16, 130);
-  },
-  chili() {
+  }),
+  chili: () => play('chili', () => {
     beep(500, 50, 0.14);
     beep(1150, 90, 0.16, 60);
-  },
-  buff() {
+  }),
+  buff: () => play('buff', () => {
     beep(440, 50, 0.14);
-    beep(660, 50, 0.14, 55);
     beep(990, 80, 0.16, 110);
-  },
-  frenzy() {
+  }),
+  frenzy: () => play('frenzy', () => {
     for (let i = 0; i < 5; i++) beep(i % 2 ? 500 : 1000, 35, 0.14, i * 45);
-  },
-  pip: () => beep(1400, 15, 0.05),
-  tap: () => beep(300, 18, 0.05),
-  burst: (n: number) => beep(420 + n * 90, 28, 0.07),
-  freeze() {
+  }),
+  pip: () => play('pip', () => beep(1400, 15, 0.05)),
+  tap: () => play('tap', () => beep(300, 18, 0.05)),
+  burst: (n: number) => play(`burst${Math.max(1, Math.min(5, n))}` as SfxName, () => beep(420 + n * 90, 28, 0.07)),
+  freeze: () => play('freeze', () => {
     beep(1600, 40, 0.1);
     beep(1200, 60, 0.1, 50);
-  },
-  mouse() {
+  }),
+  mouse: () => play('mouse', () => {
     beep(1200, 30, 0.12);
-    beep(1500, 30, 0.12, 40);
     beep(1800, 60, 0.12, 80);
-  },
-  jam() {
-    beep(180, 60, 0.14);
-    beep(140, 80, 0.14, 60);
-  },
-  teleport() {
+  }),
+  jam: () => play('jam', () => beep(180, 60, 0.14)),
+  teleport: () => play('teleport', () => {
     beep(1400, 30, 0.08);
     beep(700, 40, 0.08, 35);
-  },
-  shrink: () => beep(160, 90, 0.1),
-  prune() {
+  }),
+  shrink: () => play('shrink', () => beep(160, 90, 0.1)),
+  prune: () => play('prune', () => {
     beep(220, 55, 0.16);
     beep(160, 70, 0.16, 60);
-  },
-  rush() {
+  }),
+  rush: () => play('rush', () => {
     for (let i = 0; i < 4; i++) beep(523 * Math.pow(1.26, i), 45, 0.14, i * 60);
-  },
-  molt() {
+  }),
+  molt: () => play('molt', () => {
     beep(400, 200, 0.18);
-    beep(600, 200, 0.16, 140);
     beep(900, 320, 0.16, 280);
-  },
-  jackpot() {
+  }),
+  jackpot: () => play('jackpot', () => {
     [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, 90, 0.16, i * 90));
-  },
-  achievement() {
+  }),
+  achievement: () => play('badge', () => {
     beep(523, 90, 0.15);
-    beep(659, 90, 0.15, 90);
     beep(784, 140, 0.15, 180);
-  },
-  coin() {
+  }),
+  coin: () => play('coin', () => {
     beep(950, 40, 0.1);
     beep(1200, 60, 0.1, 40);
-  },
-  click: () => beep(700, 35, 0.08),
-  deny: () => beep(150, 90, 0.12),
+  }),
+  click: () => play('click', () => beep(700, 35, 0.08)),
+  deny: () => play('deny', () => beep(150, 90, 0.12)),
 };

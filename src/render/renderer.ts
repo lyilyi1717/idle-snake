@@ -1,60 +1,20 @@
-// Canvas 2D renderer. Reads a Sim and draws it; never mutates game state.
-// The cell size is fitted to the canvas each frame, so trial and daily
-// boards (fixed sizes) and resized windows all just work.
+// Canvas 2D renderer: the fallback when WebGL (PixiJS) isn't available.
+// Reads a Sim and draws it; never mutates game state. The cell size is
+// fitted to the canvas each frame, so fixed-size trial and daily boards and
+// resized windows all just work.
 
 import { PORTAL_COLORS, type Skin } from '../core/economy';
 import type { Pt } from '../core/grid';
 import type { Food, Sim } from '../core/sim';
-
-const CHILI_TINT = 0xe0432b;
-const BUFF_TINT = 0x33d6e0;
-const FRENZY_TINT = 0xf2c94c;
-const MUD = 0x6b4f2a;
-
-// Score-phase snake colours: visual-only progression tied to this run's score.
-const SCORE_PHASES = [
-  { min: 0, head: 0x464646, body: 0x2e2e2e },
-  { min: 10, head: 0x4d7fe6, body: 0x2456c2 },
-  { min: 100, head: 0x3fd15f, body: 0x1e8f3a },
-  { min: 300, head: 0xffce3f, body: 0xb8860b },
-  { min: 600, head: 0xff8c42, body: 0xd9581a },
-  { min: 1000, head: 0xff4040, body: 0xb31217 },
-];
+import {
+  BUFF_TINT, type BoardRenderer, CHILI_TINT, FRENZY_TINT, type FrameOpts, MOUSE_BODY, MOUSE_EAR, MUD,
+  cellFromPoint, fitBoard, snakeColors,
+} from './common';
 
 const css = (hex: number, a = 1) => `rgba(${(hex >> 16) & 255},${(hex >> 8) & 255},${hex & 255},${a})`;
 
-function lerpColor(a: number, b: number, t: number) {
-  t = Math.max(0, Math.min(1, t));
-  const ch = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t);
-  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
-}
-
-export interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  life: number;
-  color: number;
-}
-
-export interface DragView {
-  pair: number;
-  end: 'a' | 'b';
-  at: Pt | null;
-  valid: boolean;
-}
-
-export interface FrameOpts {
-  skin: Skin;
-  trail: string;
-  crt: boolean;
-  drag: DragView | null;
-  flash: { pt: Pt; until: number } | null;
-  floaters: Floater[];
-  now: number;
-}
-
-export class Renderer {
+export class Renderer implements BoardRenderer {
+  readonly kind = 'canvas2d' as const;
   private ctx: CanvasRenderingContext2D;
   cell = 16;
   ox = 0;
@@ -79,17 +39,16 @@ export class Renderer {
     }
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
-    this.cell = Math.max(4, Math.floor(Math.min(w / sim.cols, h / sim.rows)));
-    this.ox = Math.floor((w - this.cell * sim.cols) / 2);
-    this.oy = Math.floor((h - this.cell * sim.rows) / 2);
+    const f = fitBoard(w, h, sim.cols, sim.rows);
+    this.cell = f.cell;
+    this.ox = f.ox;
+    this.oy = f.oy;
   }
 
   /** Client (CSS px) coordinates → board cell, or null when off the board. */
   cellAt(sim: Sim, clientX: number, clientY: number): Pt | null {
     const r = this.canvas.getBoundingClientRect();
-    const x = Math.floor((clientX - r.left - this.ox) / this.cell);
-    const y = Math.floor((clientY - r.top - this.oy) / this.cell);
-    return x >= 0 && y >= 0 && x < sim.cols && y < sim.rows ? { x, y } : null;
+    return cellFromPoint(clientX - r.left, clientY - r.top, this, sim.cols, sim.rows);
   }
 
   draw(sim: Sim, o: FrameOpts) {
@@ -220,8 +179,8 @@ export class Renderer {
     if (sim.mouse) {
       const m = sim.mouse;
       const fading = m.until - sim.time < 2000 ? 0.5 + 0.5 * Math.sin(t / 60) : 1;
-      fillCell(m, Math.max(2, C * 0.2), css(0x8a8a8a, fading));
-      g.fillStyle = css(0xff9fb2, fading);
+      fillCell(m, Math.max(2, C * 0.2), css(MOUSE_BODY, fading));
+      g.fillStyle = css(MOUSE_EAR, fading);
       g.fillRect(X(m.x) + C * 0.2, Y(m.y) + C * 0.15, C * 0.2, C * 0.2);
       g.strokeStyle = css(0x5a5a5a, fading);
       g.lineWidth = 1;
@@ -232,12 +191,7 @@ export class Renderer {
     }
 
     // Snake.
-    let phase = SCORE_PHASES[0];
-    for (const p of SCORE_PHASES) if (sim.score >= p.min) phase = p;
-    const heat = (sim.chiliMult - 1) / 2;
-    const tint = Math.min(1, heat * 0.6 + sim.chiliGlow * 0.4);
-    const head = tint > 0 ? lerpColor(phase.head, CHILI_TINT, tint) : phase.head;
-    const body = tint > 0 ? lerpColor(phase.body, CHILI_TINT, tint * 0.8) : phase.body;
+    const { head, body } = snakeColors(sim);
     for (let i = sim.snake.length - 1; i >= 0; i--) fillCell(sim.snake[i], 1, css(i === 0 ? head : body));
     if (sim.snake.length) {
       const h0 = sim.snake[0];

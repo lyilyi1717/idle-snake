@@ -89,6 +89,13 @@ export class UI {
     bind('btnSettings', 'settingsModal');
     $('btnMute').addEventListener('click', () => this.setMuted(!this.meta.p.settings.muted));
     $('toggleMuteSetting').addEventListener('click', () => this.setMuted(!this.meta.p.settings.muted));
+    $('toggleMusic').addEventListener('click', () => {
+      audio.unlock();
+      this.meta.p.settings.music = !this.meta.p.settings.music;
+      audio.setMusic(this.meta.p.settings.music);
+      this.game.save();
+      this.refresh();
+    });
     $('toggleCrt').addEventListener('click', () => {
       this.meta.p.settings.crt = !this.meta.p.settings.crt;
       this.game.save();
@@ -176,6 +183,7 @@ export class UI {
     $('btnMute').textContent = this.meta.p.settings.muted ? 'Unmute' : 'Mute';
     $('toggleMuteSetting').textContent = this.meta.p.settings.muted ? 'OFF' : 'ON';
     $('toggleCrt').textContent = this.meta.p.settings.crt ? 'ON' : 'OFF';
+    $('toggleMusic').textContent = this.meta.p.settings.music ? 'ON' : 'OFF';
   }
 
   tick(now: number) {

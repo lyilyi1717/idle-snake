@@ -33,7 +33,7 @@ export interface Profile {
   ownedUpgrades: string[];
   unlockedAchievements: string[];
   unlockedRankTiers: string[];
-  settings: { muted: boolean; crt: boolean; skin: string; trail: string };
+  settings: { muted: boolean; music: boolean; crt: boolean; skin: string; trail: string };
   stats: {
     runs: number;
     applesEaten: number;
@@ -77,7 +77,7 @@ export function defaultProfile(now = Date.now()): Profile {
     ownedUpgrades: [],
     unlockedAchievements: [],
     unlockedRankTiers: [],
-    settings: { muted: false, crt: true, skin: 'classic', trail: 'none' },
+    settings: { muted: false, music: false, crt: true, skin: 'classic', trail: 'none' },
     stats: {
       runs: 0,
       applesEaten: 0,

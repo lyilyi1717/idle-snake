@@ -17,7 +17,14 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # Vitest suite for the simulation core
 npm run build      # typecheck + dist/index.html (single file, opens from disk)
+node scripts/make-audio.mjs   # regenerate the synthesised SFX sprite + music loop
 ```
+
+Rendering uses PixiJS (WebGL) with a CRT shader, particles and screen shake.
+If WebGL can't start, the game falls back to the Canvas 2D renderer; add
+`?canvas2d` to the URL to force it. Audio is a Howler sprite of chiptune
+SFX synthesised by `scripts/make-audio.mjs`, plus an optional music loop
+(Setup → Music). Until the sprite decodes, sounds fall back to Web Audio beeps.
 
 `dist/index.html` inlines all JS and CSS, so you can double-click it
 without a server.
@@ -85,7 +92,8 @@ src/core/     pure, deterministic simulation (no DOM, no wall clock)
   runs.ts       normal / trial / daily run configs
   zones.ts      zone wall, spike and mud generators
   rng.ts        mulberry32 + string hash, independent streams
-src/render/   Canvas 2D renderer
+src/render/   pixiRenderer.ts (WebGL), renderer.ts (Canvas 2D fallback), common.ts, create.ts
+src/assets/   generated sfx.wav + sfx.json sprite map, music.wav
 src/ui/       DOM side panel + modals
 src/game.ts   controller: loop, input, saving, offline earnings
 tests/        Vitest (tune-trials / probe are opt-in balance tools)
