@@ -87,6 +87,7 @@ export class UI {
     bind('btnBadges', 'badgesModal');
     bind('btnScores', 'scoresModal');
     bind('btnSettings', 'settingsModal');
+    bind('btnDebug', 'debugModal');
     $('btnMute').addEventListener('click', () => this.setMuted(!this.meta.p.settings.muted));
     $('toggleMuteSetting').addEventListener('click', () => this.setMuted(!this.meta.p.settings.muted));
     $('toggleMusic').addEventListener('click', () => {
@@ -116,6 +117,11 @@ export class UI {
       this.refresh();
     });
     window.addEventListener('keydown', (ev) => {
+      if (ev.key === '`' && this.openId !== 'idleModal') {
+        if (this.openId === 'debugModal') this.close('debugModal');
+        else this.open('debugModal');
+        return;
+      }
       if (ev.key === 'Escape' && this.openId && this.openId !== 'idleModal') this.close(this.openId);
     });
   }
@@ -210,7 +216,8 @@ export class UI {
     set('coinsLabel', `Coins: ${fmt(p.coins)}`);
     set('pointsLabel', `Points: ${fmt(p.points)}`);
     set('skinLabel', `Skin: ×${p.skinMult.toFixed(2)}  ·  ${p.moltCount} molts`);
-    set('speedLabel', `Spd: ${s.currentSpeed().toFixed(1)}/s  ·  ×${s.mult().toFixed(2)}`, s.liveBursts() > 0);
+    const dbg = g.timeScale !== 1 ? `  ·  DEBUG ×${g.timeScale}` : '';
+    set('speedLabel', `Spd: ${s.currentSpeed().toFixed(1)}/s  ·  ×${s.mult().toFixed(2)}${dbg}`, s.liveBursts() > 0 || g.timeScale !== 1);
     const tier = effectiveTier(s);
     const tierNote = tier !== s.cfg.brain ? ' (walls)' : '';
     set('brainLabel', `Brain: ${BRAIN_NAMES[tier]}${tierNote}`);
@@ -241,6 +248,8 @@ export class UI {
         return this.renderBadges();
       case 'scoresModal':
         return this.renderScores();
+      case 'debugModal':
+        return this.renderDebug();
     }
   }
 
@@ -397,6 +406,48 @@ export class UI {
     const best = p.daily[key];
     body.append(el('p', 'note', 'One seeded board for everyone today (UTC). Pathfinder brain, one portal pair, no upgrades, multiplier fixed at 1. No coins; just a score.'));
     body.append(row(`Today ${key}`, best !== undefined ? `Your best: ${fmt(best)}` : 'Not raced yet', action('Race', g.run.kind === 'normal' ? () => { this.close('runModal'); g.startDaily(); } : null)));
+  }
+
+  private renderDebug() {
+    const g = this.game;
+    const m = this.meta;
+    const p = m.p;
+    const body = $('debugBody');
+    body.replaceChildren();
+    const btnRow = (items: [string, () => void, boolean?][]) => {
+      const r = el('div', 'btn-row');
+      for (const [label, fn, selected] of items) r.append(action(label, fn, { selected }));
+      return r;
+    };
+    body.append(el('p', 'note', 'Cheats for testing. Press ` (backtick) to open or close this menu.'));
+
+    body.append(el('div', 'section-title', 'Zone'));
+    body.append(el('p', 'note', 'Unlocks the zone and starts a new run there right away, without a Molt payout.'));
+    body.append(btnRow(ZONES.map((z, i) => [`${z.name} ×${z.mult}`, () => { g.debugZone(i); this.toast(`Jumped to ${z.name}`); this.refresh(); }, g.run.kind === 'normal' && g.sim.cfg.zone === i] as [string, () => void, boolean])));
+
+    body.append(el('div', 'section-title', 'Game speed'));
+    body.append(el('p', 'note', `Speeds up the whole sim: ticks, the tide, timers. Currently ×${g.timeScale}. Offline-rate measuring pauses while it isn't ×1.`));
+    body.append(btnRow([0.25, 0.5, 1, 2, 4, 8, 16].map((s) => [`×${s}`, () => { g.timeScale = s; this.refresh(); }, g.timeScale === s] as [string, () => void, boolean])));
+
+    body.append(el('div', 'section-title', 'Unlocks'));
+    body.append(btnRow([
+      ['Unlock everything', () => {
+        m.debugUnlockAll();
+        g.save();
+        this.toast('Everything unlocked; applies from the next run');
+        this.refresh();
+      }],
+      ['+10K coins', () => { m.debugGrant(10_000, 0); g.save(); this.refresh(); }],
+      ['+1M coins', () => { m.debugGrant(1_000_000, 0); g.save(); this.refresh(); }],
+      ['+100K points', () => { m.debugGrant(0, 100_000); g.save(); this.refresh(); }],
+      ['New run now', () => { g.newRun({ kind: 'normal' }); this.refresh(); }],
+    ]));
+    body.append(el('p', 'note', `Brain ${BRAIN_NAMES[p.brainTier]} · zones to ${ZONES[p.maxZone].name} · portal pairs ${p.portalPairs}/3 · Skin ×${p.skinMult.toFixed(2)}`));
+
+    body.append(el('div', 'section-title', 'Data'));
+    const reset = el('button', 'danger-btn', 'Reset all data (start fresh)');
+    reset.addEventListener('click', () => this.open('resetConfirmModal'));
+    body.append(reset);
   }
 
   private renderBadges() {

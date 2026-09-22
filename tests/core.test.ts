@@ -65,6 +65,16 @@ describe('economy', () => {
     expect(meta.computeIdleReward(100_000).coins).toBe(Math.floor(0.4 * 2 * 100));
     expect(meta.computeIdleReward(48 * 3600_000).cappedSec).toBe(12 * 3600);
   });
+  it('debug unlock-all opens every brain, zone, pair and maxes the tree', () => {
+    const meta = makeMeta();
+    meta.debugUnlockAll();
+    const p = meta.p;
+    expect([p.brainTier, p.maxZone, p.portalPairs]).toEqual([4, 4, 3]);
+    expect(meta.nodeCost('quickScales')).toBe(Infinity);
+    expect(meta.portalGate()).not.toBeNull();
+    meta.debugGrant(500, 7);
+    expect([p.coins, p.points, p.stats.lifetimeCoinsEarned]).toEqual([500, 7, 0]);
+  });
   it('gates trials and portals', () => {
     const meta = makeMeta();
     expect(meta.enterTrial(2, 0)).toBe(false);

@@ -692,6 +692,8 @@ body {
 .menu-row.compact .btn-wide { padding: 9px 8px; font-size: 13px; }
 
 .molt-btn { border-style: dashed; }
+.debug-btn { border-style: dotted; opacity: .8; }
+.modal .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
 .modal.modal-wide { width: 440px; max-width: 94vw; }
 

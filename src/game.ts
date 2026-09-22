@@ -43,6 +43,8 @@ export class Game {
   private sessionActiveMs = 0;
   private lastCoinsEarned = 0;
   private resetting = false;
+  /** Debug time scale for the sim. Session earnings aren't measured while it's not 1. */
+  timeScale = 1;
 
   constructor() {
     this.canvas = document.getElementById('board') as HTMLCanvasElement;
@@ -107,6 +109,15 @@ export class Game {
     return zoneName(this.sim.cfg.zone);
   }
 
+  /** Debug: jump straight to a zone (unlocking it) and start a fresh run there. */
+  debugZone(zone: number) {
+    const p = this.meta.p;
+    p.maxZone = Math.max(p.maxZone, zone);
+    p.zone = zone;
+    this.save();
+    this.newRun({ kind: 'normal' });
+  }
+
   moltNow() {
     if (this.sim.over) return;
     this.sim.molt('manual');
@@ -146,8 +157,9 @@ export class Game {
     const now = performance.now();
 
     if (!this.sim.over) {
-      this.sim.advance(dt);
-      if (this.run.kind === 'normal') {
+      // advance() clamps each step to 250 ms, so fast-forward in slices.
+      for (let left = dt * this.timeScale; left > 0 && !this.sim.over; left -= 250) this.sim.advance(Math.min(250, left));
+      if (this.run.kind === 'normal' && this.timeScale === 1) {
         this.sessionActiveMs += dt;
         this.sessionCoins += this.sim.coinsEarned - this.lastCoinsEarned;
         this.lastCoinsEarned = this.sim.coinsEarned;

@@ -368,6 +368,27 @@ export class Meta {
     this.p.ownedUpgrades.push(id);
     return true;
   }
+  // ----- debug -----
+  /** Debug menu: every brain, zone, portal pair, cosmetic, upgrade and maxed skill node. */
+  debugUnlockAll() {
+    const p = this.p;
+    p.brainTier = 4;
+    p.activeBrain = 4;
+    p.maxZone = 4;
+    p.portalPairs = PORTAL_PRICES.length;
+    for (const id of Object.keys(SKINS)) if (!p.unlockedSkins.includes(id)) p.unlockedSkins.push(id);
+    for (const id of Object.keys(TRAILS)) if (!p.unlockedTrails.includes(id)) p.unlockedTrails.push(id);
+    for (const id of Object.keys(UPGRADES)) if (!p.ownedUpgrades.includes(id)) p.ownedUpgrades.push(id);
+    for (const b of SKILL_TREE) for (const n of b.nodes) p.skillLevels[n.id] = n.maxLevel;
+    this.dirty = true;
+  }
+  /** Debug menu: free currency, without touching lifetime stats or ranks. */
+  debugGrant(coins: number, points: number) {
+    this.p.coins += coins;
+    this.p.points += points;
+    this.dirty = true;
+  }
+
   mockPurchase(id: string) {
     const item = MOCK_STORE[id];
     if (!item) return false;
