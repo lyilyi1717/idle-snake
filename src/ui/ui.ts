@@ -221,7 +221,9 @@ export class UI {
     const tier = effectiveTier(s);
     const tierNote = tier !== s.cfg.brain ? ' (walls)' : '';
     set('brainLabel', `Brain: ${BRAIN_NAMES[tier]}${tierNote}`);
-    set('zoneLabel', `Zone: ${g.runLabel()}`);
+    const prog = this.meta.masteryProgress();
+    const mastery = prog && p.zone === p.maxZone ? `  ·  mastery ${prog[0].toFixed(1)}/${prog[1]}` : '';
+    set('zoneLabel', `Zone: ${g.runLabel()}${mastery}`, false);
     const ringSec = s.cfg.creep ? Math.ceil((s.cfg.ringIntervalMs - s.creepElapsed) / 1000) : 0;
     set('fillLabel', `Fill: ${(s.phi() * 100).toFixed(0)}%  ·  L ${s.snake.length}${s.cfg.creep ? `  ·  ring ${ringSec}s` : ''}`, s.phi() >= 0.75);
     const prune = tier >= 3 ? `  ·  prune ${s.pruneCharges}` : '';
@@ -389,7 +391,11 @@ export class UI {
     }
 
     body.append(el('div', 'section-title', 'Zone'));
-    body.append(el('p', 'note', 'Molt at 75% fill or more in your highest zone to unlock the next. Applies from the next run.'));
+    const prog = m.masteryProgress();
+    body.append(el('p', 'note',
+      prog
+        ? `Molting in your highest zone earns Zone Mastery, weighted by fill: a 75% run is worth a full point, 40% is worth about half. ${ZONES[p.maxZone].name}: ${prog[0].toFixed(2)} / ${prog[1]} towards ${ZONES[p.maxZone + 1].name}. Zone changes apply from the next run.`
+        : 'Every zone is unlocked. Zone changes apply from the next run.'));
     ZONES.forEach((z, i) => {
       const unlocked = i <= p.maxZone;
       const current = p.zone === i;

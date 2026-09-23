@@ -48,9 +48,25 @@ export function jackpotFactor(phi: number, tier = 4): number {
   return 1;
 }
 
-/** ΔSkin = 0.01 · √L · J */
-export function moltPayout(length: number, phi: number, tier = 4): number {
-  return 0.01 * Math.sqrt(length) * jackpotFactor(phi, tier);
+/**
+ * ΔSkin = 0.01 · √L · J · progress, where `progress` is how far through the
+ * tide the run got (0..1). Without it, Molting instantly over and over paid
+ * several times better per minute than playing a run out.
+ */
+export function moltPayout(length: number, phi: number, tier = 4, progress = 1): number {
+  return 0.01 * Math.sqrt(length) * jackpotFactor(phi, tier) * Math.max(0, Math.min(1, progress));
+}
+
+/**
+ * Zone Mastery. A Molt in your frontier zone earns fill-weighted credit, so
+ * the ladder is a visible grind rather than a single-run lottery.
+ */
+export const MASTERY_FLOOR = 0.1;
+export const MASTERY_SPAN = 0.65;
+export const MASTERY_NEEDED = [3, 8, 14, 24];
+
+export function masteryGain(phi: number): number {
+  return Math.max(0, Math.min(1, (phi - MASTERY_FLOOR) / MASTERY_SPAN));
 }
 
 export const comboMult = (combo: number) => Math.min(3, 1 + 0.1 * combo);
@@ -516,18 +532,30 @@ export class Meta {
   }
 
   /** Applies a Molt's prestige payout and zone unlock. Returns the ΔSkin granted. */
-  applyMolt(length: number, phi: number, zone: number, tier: number) {
-    const delta = moltPayout(length, phi, tier);
+  applyMolt(length: number, phi: number, zone: number, tier: number, progress = 1) {
+    const delta = moltPayout(length, phi, tier, progress);
     this.p.skinMult += delta;
     this.p.moltCount += 1;
     if (jackpotFactor(phi, tier) === 3) this.p.stats.jackpots += 1;
     let unlocked: number | null = null;
-    if (phi >= 0.75 && zone === this.p.maxZone && zone < 4) {
-      this.p.maxZone = zone + 1;
-      unlocked = zone + 1;
+    let mastery = 0;
+    if (zone === this.p.maxZone && zone < 4) {
+      mastery = masteryGain(phi);
+      this.p.zoneMastery += mastery;
+      if (this.p.zoneMastery >= MASTERY_NEEDED[zone]) {
+        this.p.maxZone = zone + 1;
+        this.p.zoneMastery = 0;
+        unlocked = zone + 1;
+      }
     }
     this.dirty = true;
-    return { delta, unlocked };
+    return { delta, unlocked, mastery };
+  }
+
+  /** Progress towards the next zone: [earned, needed], or null at the top. */
+  masteryProgress(): [number, number] | null {
+    const z = this.p.maxZone;
+    return z < 4 ? [this.p.zoneMastery, MASTERY_NEEDED[z]] : null;
   }
 
   checkAchievements() {

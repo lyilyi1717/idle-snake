@@ -287,7 +287,7 @@ export class Game {
       return;
     }
     const tier = effectiveTier(this.sim);
-    const { delta, unlocked } = this.meta.applyMolt(e.length, e.phi, this.sim.cfg.zone, tier);
+    const { delta, unlocked, mastery } = this.meta.applyMolt(e.length, e.phi, this.sim.cfg.zone, tier, this.sim.progress());
     const run = this.meta.recordRun({
       score: e.score,
       length: e.length,
@@ -302,7 +302,9 @@ export class Game {
     else audio.molt();
     const title = J === 3 ? 'JACKPOT MOLT!' : 'Molt!';
     const sub = `${reason} · fill ${(e.phi * 100).toFixed(0)}%${J > 1 ? ` · J×${J}` : ''}`;
-    const extra = `Skin +${delta.toFixed(3)} → ×${this.meta.p.skinMult.toFixed(2)}${run.bonus ? ` · +${run.bonus} coins` : ''}`;
+    const prog = this.meta.masteryProgress();
+    const masteryNote = mastery > 0 && prog ? ` · mastery +${mastery.toFixed(2)} (${prog[0].toFixed(1)}/${prog[1]})` : '';
+    const extra = `Skin +${delta.toFixed(3)} → ×${this.meta.p.skinMult.toFixed(2)}${run.bonus ? ` · +${run.bonus} coins` : ''}${masteryNote}`;
     this.ui.showOverlay(title, String(e.score), sub, extra);
     if (unlocked !== null) this.ui.toast(`Zone unlocked: ${zoneName(unlocked)} (×${(1 + 0.5 * unlocked).toFixed(1)})`, 3500);
     this.save();

@@ -25,6 +25,8 @@ export interface Profile {
   activeBrain: number;
   zone: number;
   maxZone: number;
+  /** Fill-weighted credit banked towards unlocking the next zone. */
+  zoneMastery: number;
   skillLevels: Record<string, number>;
   portalPairs: number;
   portalLayout: (PortalPos | null)[];
@@ -69,6 +71,7 @@ export function defaultProfile(now = Date.now()): Profile {
     activeBrain: 1,
     zone: 0,
     maxZone: 0,
+    zoneMastery: 0,
     skillLevels: {},
     portalPairs: 0,
     portalLayout: [],

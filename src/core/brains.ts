@@ -198,7 +198,10 @@ function hamiltonian(sim: Sim): Dir | null {
   const ringLen = 2 * (rectW(sim.arena) + rectH(sim.arena)) - 4;
   const innerCyc =
     sim.cfg.creep && rectW(next) >= 2 && rectH(next) >= 2 ? buildCycle(next, sim.cols, sim.rows) : null;
-  const warn = !!innerCyc && sim.ticksToShrink() <= ringLen + 4;
+  // Bursts and Rush make ticks cheap now but not later. Size the warn window
+  // with the base speed, the slowest the run can fall back to, or a run that
+  // was fast when it checked can still be on the ring when the tide lands.
+  const warn = !!innerCyc && sim.ticksToShrink(sim.cfg.baseSpeed) <= ringLen + 4;
   const ctx = sim.gridCtx({ portals: false });
   const free = (c: number) => c >= 0 && !ctx.blocked[c];
   const toDir = (c: number) => {

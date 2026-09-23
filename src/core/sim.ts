@@ -111,6 +111,8 @@ const BURST = { maxStacks: 5, lifeMs: 1000, step: 0.1, rushStep: 0.3 };
 const SPIKE = { periodMs: 2000, jamMs: 3000, cooldownMs: 10000 };
 const PORTAL = { minSeparation: 10, startMoves: 2, maxMoves: 3, regenMs: 30000 };
 const PRUNE_PHI = 0.35;
+/** Fraction of a ring interval after which pickups spawn inside the next ring. */
+const SPAWN_SAFE_FROM = 0.4;
 const TRAIL_LIFE_MS = 450;
 
 export class Sim {
@@ -173,7 +175,7 @@ export class Sim {
   private chiliCd: number;
   private buffCd: number;
   private frenzyCd: number;
-  private frenzyTarget = FRENZY.min;
+
 
   constructor(cfg: RunConfig) {
     this.cfg = cfg;
@@ -205,7 +207,6 @@ export class Sim {
     this.applesLeft = cfg.apples ?? Infinity;
 
     this.placeSnake();
-    this.frenzyTarget = Math.max(FRENZY.min, Math.min(FRENZY.max, Math.round((this.freeCells() - 3) * FRENZY.fraction)));
     cfg.portals.forEach((pos) => this.setupPortal(pos, false));
     this.spawnFood();
   }
@@ -269,18 +270,34 @@ export class Sim {
     if (samePt(this.food, p) || samePt(this.twin, p) || samePt(this.mouse, p)) return false;
     return !this.pips.some((q) => samePt(q, p));
   }
+  /**
+   * Once a ring is more than 40% through, prefer the cells that will survive
+   * it: pickups placed in a doomed corridor drag the snake out there and get
+   * it swept. Falls back to the whole arena when the inner ring has no room.
+   */
+  private spawnRect(): Rect {
+    if (!this.cfg.creep) return this.arena;
+    if (this.creepElapsed < this.cfg.ringIntervalMs * SPAWN_SAFE_FROM) return this.arena;
+    const next = this.nextArena();
+    return rectW(next) >= 2 && rectH(next) >= 2 ? next : this.arena;
+  }
+
   private randomFreeCell(rng: Rng, accept: (p: Pt) => boolean = () => true): Pt | null {
-    for (let i = 0; i < 200; i++) {
-      const p = { x: rng.int(this.arena.x0, this.arena.x1), y: rng.int(this.arena.y0, this.arena.y1) };
-      if (this.isFreeCell(p) && accept(p)) return p;
-    }
-    const all: Pt[] = [];
-    for (let y = this.arena.y0; y <= this.arena.y1; y++)
-      for (let x = this.arena.x0; x <= this.arena.x1; x++) {
-        const p = { x, y };
-        if (this.isFreeCell(p) && accept(p)) all.push(p);
+    const rects = [this.spawnRect(), this.arena];
+    for (const r of rects) {
+      for (let i = 0; i < 120; i++) {
+        const p = { x: rng.int(r.x0, r.x1), y: rng.int(r.y0, r.y1) };
+        if (this.isFreeCell(p) && accept(p)) return p;
       }
-    return all.length ? all[rng.int(0, all.length - 1)] : null;
+      const all: Pt[] = [];
+      for (let y = r.y0; y <= r.y1; y++)
+        for (let x = r.x0; x <= r.x1; x++) {
+          const p = { x, y };
+          if (this.isFreeCell(p) && accept(p)) all.push(p);
+        }
+      if (all.length) return all[rng.int(0, all.length - 1)];
+    }
+    return null;
   }
 
   // -------------------------------------------------------------------------
@@ -441,9 +458,11 @@ export class Sim {
   tickMs() {
     return 1000 / this.currentSpeed();
   }
-  ticksToShrink() {
+  /** Ticks left before the next shrink, optionally at a given (slower) speed. */
+  ticksToShrink(atSpeed?: number) {
     if (!this.cfg.creep) return Infinity;
-    return (this.cfg.ringIntervalMs - this.creepElapsed) / this.tickMs();
+    const ms = atSpeed ? 1000 / atSpeed : this.tickMs();
+    return (this.cfg.ringIntervalMs - this.creepElapsed) / ms;
   }
 
   // -------------------------------------------------------------------------
@@ -704,7 +723,11 @@ export class Sim {
   spawnFood(force?: FoodKind) {
     this.food = null;
     this.twin = null;
-    const p = this.randomFreeCell(this.rng.food);
+    let p = this.randomFreeCell(this.rng.food);
+    if (!p && this.pips.length) {
+      // Room only looks gone because pips are holding cells: take one back.
+      p = this.pips.pop()!;
+    }
     if (!p) {
       this.molt('filled');
       return;
@@ -730,8 +753,20 @@ export class Sim {
     }
   }
 
+  /**
+   * Pips are a fraction of the room actually left, recomputed every time.
+   * Sizing them once from the full board used to let them swallow every free
+   * cell late in a run, which starved the food spawn and ended the run early.
+   */
+  private pipTarget() {
+    const room = this.freeCells() - this.snake.length;
+    return Math.max(0, Math.min(FRENZY.max, Math.floor(room * FRENZY.fraction)));
+  }
+
   private spawnPips() {
-    while (this.pips.length < this.frenzyTarget) {
+    const target = this.pipTarget();
+    if (this.pips.length > target) this.pips.length = target;
+    while (this.pips.length < target) {
       const p = this.randomFreeCell(this.rng.special);
       if (!p) break;
       this.pips.push(p);
@@ -742,6 +777,15 @@ export class Sim {
   // Creep
   // -------------------------------------------------------------------------
 
+  /** Rings the tide can still take on this board. */
+  totalRings() {
+    return Math.max(1, Math.floor(Math.min(this.cols, this.rows) / 2) - 1);
+  }
+  /** How far the run got through the tide, 0..1. Scales the Molt payout. */
+  progress() {
+    return this.cfg.creep ? Math.min(1, this.rings / this.totalRings()) : 1;
+  }
+
   nextArena() {
     return shrinkRect(this.arena);
   }
@@ -749,6 +793,13 @@ export class Sim {
   private shrink() {
     const next = this.nextArena();
     if (rectW(next) < 2 || rectH(next) < 2) {
+      this.molt('closed');
+      return;
+    }
+    // Too long to fit inside the next ring: the tide closes on the snake.
+    // That's the intended end of a long run, not a brain failure, so it reads
+    // as 'closed' (and keeps the pre-shrink arena for φ).
+    if (this.freeCells(next) < this.snake.length) {
       this.molt('closed');
       return;
     }
@@ -771,7 +822,7 @@ export class Sim {
         this.twin = null;
       } else this.spawnFood();
     }
-    this.pips = this.pips.filter((p) => this.inArena(p));
+    this.pips = this.pips.filter((p) => this.inArena(p)).slice(0, this.pipTarget());
     if (this.mouse && !this.inArena(this.mouse)) this.mouse = null;
     this.portals.forEach((p, i) => {
       if (p.alive && (!this.inArena(p.a) || !this.inArena(p.b))) {

@@ -2,7 +2,7 @@
 // Walls are generated from the board size, so every layout works at any
 // screen size. Zone n pays ×(1 + 0.5n).
 
-import type { Pt } from './grid';
+import { type Pt, type Rect, inRect, shrinkRect } from './grid';
 import { Rng } from './rng';
 
 export interface ZoneLayout {
@@ -100,12 +100,29 @@ function spiral(cols: number, rows: number): ZoneLayout {
   return out;
 }
 
+/**
+ * The rectangle the tide ends its run in. Walls and hazards are cleared from
+ * it so the last rings stay a loop the snake can fill: in Cross and Tunnels
+ * they used to cut the final arena into dead ends, which put φ ≥ 0.75 — and
+ * with it the zone ladder — out of reach entirely.
+ */
+export function coreRect(cols: number, rows: number): Rect {
+  const rings = Math.max(0, Math.floor(Math.min(cols, rows) / 2) - 2);
+  return shrinkRect({ x0: 0, y0: 0, x1: cols - 1, y1: rows - 1 }, rings);
+}
+
+function clearCore(layout: ZoneLayout, cols: number, rows: number): ZoneLayout {
+  const core = coreRect(cols, rows);
+  const keep = (p: Pt) => !inRect(core, p.x, p.y);
+  return { walls: layout.walls.filter(keep), spikes: layout.spikes.filter(keep), mud: layout.mud.filter(keep) };
+}
+
 export const ZONES: ZoneDef[] = [
   { id: 'open', name: 'Open', mult: 1, desc: 'No walls. The only zone where the Hamiltonian brain runs.', build: empty },
-  { id: 'box', name: 'Box', mult: 1.5, desc: 'A walled box with four doors.', build: box },
-  { id: 'cross', name: 'Cross', mult: 2, desc: 'Four arms split the board.', build: cross },
-  { id: 'tunnels', name: 'Tunnels', mult: 2.5, desc: 'Walled rows. Spikes pulse in the tunnels — tap to jam them.', build: tunnels },
-  { id: 'spiral', name: 'Spiral', mult: 3, desc: 'Nested rings with mud that slows the head.', build: spiral },
+  { id: 'box', name: 'Box', mult: 1.5, desc: 'A walled box with four doors.', build: (c, r) => clearCore(box(c, r), c, r) },
+  { id: 'cross', name: 'Cross', mult: 2, desc: 'Four arms split the board.', build: (c, r) => clearCore(cross(c, r), c, r) },
+  { id: 'tunnels', name: 'Tunnels', mult: 2.5, desc: 'Walled rows. Spikes pulse in the tunnels — tap to jam them.', build: (c, r) => clearCore(tunnels(c, r), c, r) },
+  { id: 'spiral', name: 'Spiral', mult: 3, desc: 'Nested rings with mud that slows the head.', build: (c, r) => clearCore(spiral(c, r), c, r) },
 ];
 
 export const zoneMult = (n: number) => 1 + 0.5 * n;

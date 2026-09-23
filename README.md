@@ -42,8 +42,14 @@ without a server.
   If the head is outside, the snake Molts.
 - **Molt.** A Molt comes from hitting a wall or yourself, the tide, the
   arena closing, a full board, or pressing *Molt Now*. It pays
-  `ΔSkin = 0.01·√L·J`, where `J` depends on fill φ = L / free arena cells:
-  ×1.5 at φ ≥ 0.75, and ×3 at φ ≥ 0.95. The ×3 needs the Hamiltonian brain.
+  `ΔSkin = 0.01·√L·J·progress`, where `J` depends on fill φ = L / free arena
+  cells (×1.5 at φ ≥ 0.75, ×3 at φ ≥ 0.95 with the Hamiltonian brain) and
+  `progress` is the fraction of the tide's rings the run survived. Molting
+  early therefore pays almost nothing.
+- **Zone Mastery.** Every Molt in your highest zone banks
+  `(φ − 0.10) / 0.65` mastery, capped at 1, so a φ ≥ 0.75 run is a full
+  point and a 40% run is about half. The next zone unlocks at 3, 8, 14 and
+  24 points.
 - **Combo.** Eat within 25 ticks of the last apple to build combo, worth up
   to ×3. The first portal trip per apple adds 10 ticks to the window.
 - **Score multiplier** is additive within each category and multiplicative
@@ -72,8 +78,9 @@ without a server.
 - **Brains & Zones:**
   - Brain Trials (500 / 3,000 / 15,000 coins). A fixed 16×12 board where
     only the new brain survives. Retries are free for 10 minutes.
-  - Zones: Open, Box, Cross, Tunnels, Spiral (×1, ×1.5, ×2, ×2.5, ×3). A
-    Molt at φ ≥ 0.75 in your top zone unlocks the next one.
+  - Zones: Open, Box, Cross, Tunnels, Spiral (×1, ×1.5, ×2, ×2.5, ×3),
+    unlocked with Zone Mastery. Zone walls never reach the last rings, so
+    the final arena is always a loop that can be filled.
   - Daily Race: same seed for everyone on a UTC date, fixed loadout, no coins.
 - **Events:** a 30 s Rush every 8–12 minutes. Mice appear every 45–90 s.
   15% of apples fade out after 8 s and are worth ×3.

@@ -22,6 +22,11 @@ design decisions were kept. Where they conflicted with each other, or with
 | Mouse "moves away" | The mouse only moves onto free cells (no body, walls, portals or food). | Resolves the research review's collision-hole finding. |
 | Wrap mode, Phase Walls, Bigger Bite, Body Toss, Auto-Collect, lives | Removed. Their skill-tree levels are refunded on migration. | Autopilot and "never dies" make them meaningless, and wrap breaks the brains' geometry. |
 | — | Added a **Combo Lure** node (+3 combo-window ticks per level) and a **Molt Now** button. | Gives combo play an upgrade path. Voluntary prestige is standard for the genre. |
+| Zone unlock: one Molt at φ ≥ 0.75 | **Zone Mastery**: each Molt in the frontier zone banks `clamp((φ−0.10)/0.65, 0, 1)`; the next zone opens at 3 / 8 / 14 / 24 points. | A single-run threshold was a lottery that most brains could never win. The meter turns it into visible, steady progress while still rewarding fill. |
+| `ΔSkin = 0.01·√L·J` | Multiplied by `progress` = rings survived / total rings. | Molting instantly, over and over, paid 4–13× better per minute than playing a run out. |
+| Zone walls generated across the whole board | Walls, spikes and mud are cleared from the final arena (`coreRect` in `zones.ts`). | In Cross and Tunnels the last rings were cut into dead ends, so φ ≥ 0.75 — and with it the zone ladder — was geometrically impossible. |
+| Frenzy pips sized once per run | Pip target recomputed from the room actually left, trimmed on each shrink, and food may take a pip's cell. | Pips sized from the full board swallowed every free cell late in a run and ended 30–50% of runs early at low fill. |
+| Pickups spawn anywhere in the arena | After 40% of a ring interval they spawn inside the next ring. | Food in a doomed corridor dragged the snake out to be swept. |
 | Pair 3 "needs Zone 3" | Needs Tunnels (zone index 3) unlocked. | Zones are 0-indexed (Open = 0, so its ×1 is `1 + 0.5·0`). |
 
 ## Tuning knobs
@@ -34,12 +39,26 @@ design decisions were kept. Where they conflicted with each other, or with
   trial outcomes per brain and full-run stats per tier.
 - Trial search: `SEARCH=out.txt npx vitest run tests/tune-trials.test.ts`.
 
-First-pass measurements (48×30 board, no upgrades, 240 s run):
+Measured after the fill rebalance (48×30, 12 seeds per cell,
+`BALANCE=out.txt npx vitest run tests/balance.test.ts`):
+
+| Brain / zone | median φ | φ ≥ 0.75 | mastery per run | ΔSkin per run |
+|---|---|---|---|---|
+| Survivor, Open | 0.50–0.60 | 17–33% | 0.59–0.73 | 0.066–0.074 |
+| Survivor, Box / Cross / Tunnels | 0.40–0.60 | 17–25% | 0.47–0.76 | 0.052–0.067 |
+| Survivor, Spiral | 0.48–0.68 | 0–42% | 0.47–0.65 | 0.043–0.083 |
+| Hamiltonian, Open | 1.00 | 67% | 0.86–0.96 | 0.147–0.198 |
+
+Molt-Now spam now pays 0.000–0.010 ΔSkin/min against 0.012–0.039 for a full
+run, and banks no mastery at all. At roughly 0.5 mastery per run, the ladder
+runs about 20 min to Box and some 6 h of active play to Spiral.
+
+Earlier first-pass measurements (before the rebalance):
 
 | Brain | Apples per run | Usual end | Final φ |
 |---|---|---|---|
 | Greedy | ~45–75 | Self-collision at 110–150 s | < 0.1 |
-| Pathfinder / Survivor | ~70–135 | Late self-collision, or survives to the end | 0.5–1.0 (J capped at 1.5) |
+| Pathfinder / Survivor | ~70–135 | Late self-collision, or survives to the end | 0.1–0.3 median (this line originally overstated it) |
 | Hamiltonian | ~40–55 | Always survives to arena close | 0.8–1.0 |
 
 That matches the intended trade: fewer apples than the Pathfinder, but the

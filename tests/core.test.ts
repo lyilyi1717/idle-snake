@@ -51,12 +51,25 @@ describe('economy', () => {
     expect(comboMult(5)).toBeCloseTo(1.5);
     expect(comboMult(50)).toBe(3);
   });
-  it('unlocks the next zone on a φ ≥ 0.75 Molt in the top zone', () => {
+  it('banks Zone Mastery by fill and unlocks at the threshold', () => {
     const meta = makeMeta();
-    expect(meta.applyMolt(50, 0.5, 0, 2).unlocked).toBeNull();
-    expect(meta.applyMolt(50, 0.8, 0, 2).unlocked).toBe(1);
+    // A φ ≥ 0.75 Molt is worth a full point; Open needs 3.
+    expect(meta.applyMolt(50, 0.8, 0, 2).unlocked).toBeNull();
+    expect(meta.p.zoneMastery).toBeCloseTo(1);
+    expect(meta.applyMolt(50, 0.42, 0, 2).mastery).toBeCloseTo((0.42 - 0.1) / 0.65);
+    expect(meta.masteryProgress()).toEqual([meta.p.zoneMastery, 3]);
+    // Mastery is only earned in the frontier zone.
+    expect(meta.applyMolt(50, 0.9, 3, 2).mastery).toBe(0);
+    while (meta.p.maxZone === 0) meta.applyMolt(50, 0.8, 0, 2);
     expect(meta.p.maxZone).toBe(1);
+    expect(meta.p.zoneMastery).toBe(0);
     expect(meta.p.skinMult).toBeGreaterThan(1);
+  });
+
+  it('scales the Molt payout by how far the tide got', () => {
+    expect(moltPayout(100, 0.5, 3, 0)).toBe(0);
+    expect(moltPayout(100, 0.5, 3, 0.5)).toBeCloseTo(0.05);
+    expect(moltPayout(100, 0.5, 3, 1)).toBeCloseTo(0.1);
   });
   it('computes offline earnings from the last session rate', () => {
     const meta = makeMeta();
@@ -233,6 +246,7 @@ describe('brains', () => {
       const sim = new Sim(baseConfig({ cols: 32, rows: 20, brain: 4, creep: true, ringIntervalMs: 12000, seed }));
       runTicks(sim, 100_000);
       const m = moltEvent(sim)!;
+      // Tier 4 never traps: it only ends when the tide closes on it.
       expect(['closed', 'filled']).toContain(m.reason);
     });
   }
